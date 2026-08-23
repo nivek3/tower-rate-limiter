@@ -1,7 +1,0 @@
-fix: docs: clarify Axum Send+Sync+'static store bounds
-
-- README.md: clarify Axum Send+Sync+'static bounds at integration boundary
-
-Fixes #29
-
-Signed-off-by: Vedant Madane <6527493+VedantMadane@users.noreply.github.com>
