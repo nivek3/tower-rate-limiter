@@ -81,3 +81,26 @@ Licensed under either
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)); or
 - MIT License ([LICENSE-MIT](LICENSE-MIT)).
+
+
+## Axum integration bounds
+
+When wiring a custom store into Axum helpers, keep `Send + Sync + 'static` (and
+`S::Future: Send + 'static`) on the **integration** function, not on the core
+`Store` trait:
+
+```rust
+fn add_rate_limit<S>(router: axum::Router, store: S) -> Result<axum::Router, ConfigError>
+where
+    S: Store + Send + Sync + 'static,
+    S::Future: Send + 'static,
+{
+    let layer = RateLimitLayer::builder(IpKeyExtractor::new())
+        .with_store(store)
+        .build()?;
+    Ok(router.layer(layer))
+}
+```
+
+Axum requires these bounds so the service can move across tasks; the core trait stays
+usable in single-threaded contexts without them.
