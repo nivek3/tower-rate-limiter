@@ -13,8 +13,9 @@ use std::{
 use http::{Request, Response, header};
 use tower::{Layer, Service};
 use tower_rate_limiter::{
-    ClientIpKeyExtractor, ConfigError, IpKeyExtractor, KeyExtractor, LimitProvider, RateLimitError, RateLimitLayer,
-    ResponseFactory, ResponseFuture, ResponseReason, Store, TrustedProxyClientIpKeyExtractor, Usage,
+    ClientIpKeyExtractor, ConfigError, FixedWindow, FixedWindowStore, FixedWindowUsage, IpKeyExtractor, KeyExtractor,
+    PolicyFailureMode, RateLimitError, RateLimitLayer, RateLimitPolicy, ResponseFactory, ResponseFuture,
+    ResponseReason, TrustedProxyClientIpKeyExtractor,
 };
 
 #[derive(Clone, Debug)]
@@ -31,38 +32,26 @@ impl KeyExtractor for StaticKey {
 #[derive(Clone, Debug)]
 struct TestStore;
 
-impl Store for TestStore {
-    type Future = Ready<Result<Usage, RateLimitError>>;
+impl FixedWindowStore for TestStore {
+    type Future = Ready<Result<FixedWindowUsage, RateLimitError>>;
 
     fn increment(&self, _key: &str, window: Duration) -> Self::Future {
-        ready(Ok(Usage {
+        ready(Ok(FixedWindowUsage {
             used: 1,
             reset_after: window,
         }))
     }
 }
 
-#[derive(Clone)]
-struct TestLimit;
-
-impl LimitProvider for TestLimit {
-    type Future = Ready<Result<u64, RateLimitError>>;
-
-    fn limit<B>(&self, _request: &Request<B>) -> Self::Future {
-        ready(Ok(7))
-    }
-}
-
 #[test]
 fn response_future_is_publicly_nameable() {
     #[allow(dead_code)]
-    fn assert_public<ReqBody, Inner, S, P, F>()
+    fn assert_public<ReqBody, Inner, P, F>()
     where
         Inner: tower::Service<Request<ReqBody>>,
-        S: Store,
-        P: LimitProvider,
+        P: RateLimitPolicy,
     {
-        let _: Option<ResponseFuture<ReqBody, Inner, S, P, F>> = None;
+        let _: Option<ResponseFuture<ReqBody, Inner, P, F>> = None;
     }
 }
 
@@ -109,26 +98,14 @@ impl<T: Unpin> Future for LocalFuture<T> {
 }
 
 #[derive(Clone)]
-struct LocalLimitProvider(Rc<()>);
-
-impl LimitProvider for LocalLimitProvider {
-    type Future = LocalFuture<Result<u64, RateLimitError>>;
-
-    fn limit<B>(&self, _request: &Request<B>) -> Self::Future {
-        let _ = &self.0;
-        LocalFuture::ready(Ok(1))
-    }
-}
-
-#[derive(Clone)]
 struct LocalStore(Rc<()>);
 
-impl Store for LocalStore {
-    type Future = LocalFuture<Result<Usage, RateLimitError>>;
+impl FixedWindowStore for LocalStore {
+    type Future = LocalFuture<Result<FixedWindowUsage, RateLimitError>>;
 
     fn increment(&self, _key: &str, window: Duration) -> Self::Future {
         let _ = &self.0;
-        LocalFuture::ready(Ok(Usage {
+        LocalFuture::ready(Ok(FixedWindowUsage {
             used: 1,
             reset_after: window,
         }))
@@ -166,9 +143,10 @@ impl Service<Request<Rc<()>>> for LocalService {
 #[test]
 fn local_components_futures_and_display_only_keys_are_supported() {
     let local = Rc::new(());
+    let policy = FixedWindow::new(LocalStore(Rc::clone(&local)), 1, Duration::from_secs(1))
+        .expect("valid local fixed-window policy");
     let layer = RateLimitLayer::builder(LocalKeyExtractor(Rc::clone(&local)))
-        .limit_provider(LocalLimitProvider(Rc::clone(&local)))
-        .with_store(LocalStore(Rc::clone(&local)))
+        .with_policy(policy)
         .response_factory(LocalResponseFactory(Rc::clone(&local)))
         .build()
         .expect("valid local layer");
@@ -185,8 +163,9 @@ struct InnerValue(usize);
 
 #[test]
 fn rate_limit_exposes_standard_inner_service_accessors() {
+    let policy = FixedWindow::new(TestStore, 7, Duration::from_secs(30)).expect("valid fixed-window policy");
     let layer = RateLimitLayer::builder(StaticKey)
-        .with_store(TestStore)
+        .with_policy(policy)
         .build()
         .expect("valid layer");
     let mut service = layer.layer(InnerValue(1));
@@ -198,7 +177,8 @@ fn rate_limit_exposes_standard_inner_service_accessors() {
 
 #[test]
 fn public_composition_types_offer_non_revealing_debug_output() {
-    let builder = RateLimitLayer::builder(StaticKey).with_store(TestStore);
+    let policy = FixedWindow::new(TestStore, 7, Duration::from_secs(30)).expect("valid fixed-window policy");
+    let builder = RateLimitLayer::builder(StaticKey).with_policy(policy);
     assert!(format!("{builder:?}").contains("RateLimitBuilder"));
 
     let layer = builder.build().expect("valid layer");
@@ -213,14 +193,14 @@ fn public_composition_types_offer_non_revealing_debug_output() {
 
 #[test]
 fn rate_limit_errors_expose_a_stable_code_and_message() {
-    let error = RateLimitError::Store(
+    let error = RateLimitError::Policy(
         String::from("redis_unavailable"),
         String::from("usage increment failed"),
     );
 
     assert!(matches!(
         error,
-        RateLimitError::Store(code, message)
+        RateLimitError::Policy(code, message)
             if code == "redis_unavailable" && message == "usage increment failed"
     ));
 }
@@ -253,8 +233,9 @@ impl Service<Request<Vec<u8>>> for DifferentBodyService {
 
 #[test]
 fn request_and_response_body_types_may_differ() {
+    let policy = FixedWindow::new(TestStore, 7, Duration::from_secs(30)).expect("valid fixed-window policy");
     let layer = RateLimitLayer::builder(StaticKey)
-        .with_store(TestStore)
+        .with_policy(policy)
         .build()
         .expect("valid layer");
     let mut service = layer.layer(DifferentBodyService);
@@ -270,11 +251,11 @@ fn request_and_response_body_types_may_differ() {
 
 #[test]
 fn custom_store_builder_is_available_without_default_features() {
+    let policy = FixedWindow::new(TestStore, 7, Duration::from_secs(30)).expect("valid fixed-window policy");
     let _layer = RateLimitLayer::builder(StaticKey)
-        .limit_provider(TestLimit)
-        .window(Duration::from_secs(30))
         .policy_name("api")
-        .with_store(TestStore)
+        .policy_failure_mode(PolicyFailureMode::Allow)
+        .with_policy(policy)
         .response_factory(TestFactory)
         .build()
         .expect("valid builder configuration");
@@ -287,8 +268,9 @@ fn memory_store_is_explicitly_injected() {
 
     assert_eq!(MemoryStoreError::InstantOutOfRange, MemoryStoreError::InstantOutOfRange);
 
+    let policy = FixedWindow::new(MemoryStore::new(), 7, Duration::from_secs(30)).expect("valid fixed-window policy");
     let _layer = RateLimitLayer::builder(StaticKey)
-        .with_store(MemoryStore::new())
+        .with_policy(policy)
         .build()
         .expect("explicit memory store");
 }
@@ -303,17 +285,22 @@ fn redis_store_errors_are_public_and_equatable() {
 
 #[test]
 fn invalid_window_and_policy_are_rejected_at_build() {
-    let too_short = RateLimitLayer::builder(StaticKey)
-        .window(Duration::from_micros(999))
-        .with_store(TestStore)
-        .build();
+    let too_short = FixedWindow::new(TestStore, 1, Duration::from_micros(999));
     assert!(matches!(too_short, Err(ConfigError::WindowTooShort(_, _))));
 
+    let policy = FixedWindow::new(TestStore, 1, Duration::from_secs(1)).expect("valid fixed-window policy");
     let empty_policy = RateLimitLayer::builder(StaticKey)
         .policy_name("")
-        .with_store(TestStore)
+        .with_policy(policy)
         .build();
     assert!(matches!(empty_policy, Err(ConfigError::EmptyPolicyName)));
+
+    let policy = FixedWindow::new(TestStore, 1, Duration::from_secs(1)).expect("valid fixed-window policy");
+    let invalid_policy = RateLimitLayer::builder(StaticKey)
+        .policy_name("not\nstructured")
+        .with_policy(policy)
+        .build();
+    assert!(matches!(invalid_policy, Err(ConfigError::InvalidPolicyName)));
 }
 
 #[test]

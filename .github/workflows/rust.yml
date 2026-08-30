@@ -72,11 +72,17 @@ jobs:
         run: cargo test --locked --no-default-features --features axum
       - name: Test tracing in isolation
         run: cargo test --locked --no-default-features --features tracing
+      - name: Test Memory GCRA in isolation
+        run: cargo test --locked --no-default-features --features memory-gcra --test memory_gcra
       - name: Check features without default features
         run: |
           cargo check --locked --no-default-features --features memory
+          cargo check --locked --no-default-features --features memory-gcra
           cargo check --locked --no-default-features --features redis
           cargo check --locked --no-default-features --features redis-lua
+          cargo check --locked --no-default-features --features redis-gcra,runtime-tokio
+          cargo check --locked --no-default-features --features redis-gcra,runtime-smol
+          cargo check --locked --no-default-features --features postgres-gcra
           cargo check --locked --no-default-features --features runtime-tokio
           cargo check --locked --no-default-features --features runtime-smol
       - name: Check examples
@@ -123,6 +129,12 @@ jobs:
           - name: Smol / Lua
             features: redis-lua,runtime-smol
             targets: --test redis_store_smol
+          - name: Tokio / GCRA
+            features: redis-gcra,runtime-tokio
+            targets: --test redis_gcra_interfaces --test redis_gcra_tokio
+          - name: Smol / GCRA
+            features: redis-gcra,runtime-smol
+            targets: --test redis_gcra_smol
     services:
       redis:
         image: redis:7-alpine
@@ -144,6 +156,33 @@ jobs:
           cache-on-failure: true
       - name: Run Redis integration test
         run: cargo test --locked --no-default-features --features "${{ matrix.features }}" ${{ matrix.targets }}
+
+  postgres-gcra-test:
+    name: PostgreSQL / GCRA
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tower_rate_limiter
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tower_rate_limiter" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/tower_rate_limiter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: 'v0.10.0'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Run PostgreSQL GCRA integration tests
+        run: cargo test --locked --no-default-features --features postgres-gcra --test postgres_gcra_interfaces --test postgres_gcra
 
   msrv:
     name: MSRV Check

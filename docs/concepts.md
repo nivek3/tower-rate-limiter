@@ -1,6 +1,6 @@
 # How it works
 
-`tower-rate-limiter` separates rate-limit policy from application concerns through four narrow
+`tower-rate-limiter` separates rate-limit policy from application concerns through three narrow
 interfaces.
 
 ## The request lifecycle
@@ -9,11 +9,10 @@ For each request presented to the Layer, the service follows this order:
 
 1. Evaluate the optional bypass predicate.
 2. Extract the client key synchronously.
-3. Resolve the quota, possibly asynchronously.
-4. Derive the policy-scoped Store key and apply optional key encoding.
-5. Atomically increment usage for the configured window.
-6. Validate and evaluate returned usage.
-7. Call the already-ready inner service or build an immediate response.
+3. Derive the policy-scoped key and apply optional key encoding.
+4. Ask the selected policy to charge that key.
+5. Evaluate the returned Decision.
+6. Call the already-ready inner service or build an immediate response.
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "10px"}, "flowchart": {"curve": "basis", "useMaxWidth": false, "padding": 5, "nodeSpacing": 14, "rankSpacing": 18}}}%%
@@ -23,18 +22,15 @@ flowchart TD
     skipped_inner --> skipped_response["Inner response<br/>No rate-limit fields"]
     skip -- "No" --> key["KeyExtractor"]
     key -- "Key error" --> response_factory["ResponseFactory"]
-    key --> limit["LimitProvider"]
-    limit -- "Quota error" --> response_factory
-    limit --> store["Store::increment"]
-    store --> usage{"Valid Store result?<br/>Ok and used ≥ 1"}
-    usage -- "No or Store error" --> failure_mode{"Store failure mode"}
+    key --> policy["RateLimitPolicy::check"]
+    policy -- "Policy error" --> failure_mode{"Policy failure mode"}
+    policy --> decision{"Allowed or rate limited?"}
     failure_mode -- "Allow" --> fail_open_inner["Inner service<br/>No quota metadata"]
     fail_open_inner --> fail_open_response["Inner response<br/>No rate-limit fields"]
     failure_mode -- "Reject" --> response_factory
-    usage -- "Yes" --> decision{"used > limit?"}
-    decision -- "Yes · RateLimited" --> response_factory
+    decision -- "Rate limited" --> response_factory
     response_factory --> middleware_response["Middleware-produced response<br/>429, 500, or 503 by default"]
-    decision -- "No" --> context["Add RateLimitContext<br/>to the request"]
+    decision -- "Allowed" --> context["Add RateLimitContext<br/>to the request"]
     context --> inner["Inner service"]
     inner --> response["Inner response<br/>Rate-limit fields appended"]
 
@@ -46,8 +42,8 @@ flowchart TD
     classDef danger fill:#ffe4e6,stroke:#f43f5e,color:#881337,stroke-width:1.5px
 
     class request entry
-    class key,limit,store,response_factory,context,inner process
-    class skip,usage,failure_mode,decision decision
+    class key,policy,response_factory,context,inner process
+    class skip,failure_mode,decision decision
     class response success
     class skipped_inner,skipped_response,fail_open_inner,fail_open_response neutral
     class middleware_response danger
@@ -76,43 +72,43 @@ the same strict Header selection as `ClientIpKeyExtractor` and falls back to the
 supported Headers are absent. A malformed first-present Header still fails closed. The crate does
 not infer trust from environment variables or Header contents.
 
-## Quota resolution
+## Policy charging
 
-`LimitProvider` asynchronously resolves a request's quota. Calling `.limit(n)` uses a fixed `u64`,
-while a custom provider can select a quota from validated request state.
+`RateLimitPolicy` owns the algorithm and quota. It asynchronously charges a complete scoped key and
+returns a `Decision`: `Allowed` or `RateLimited`, together with the advertised limit, window,
+remaining capacity, reset duration, and—when rejected—the earliest retry duration.
 
-Quota resolution completes before the Store is charged. Key and quota failures always reject the
-request and never fail open.
-
-## Usage storage
-
-`Store` atomically increments a scoped key and returns:
-
-```text
-Usage { used, reset_after }
-```
-
-The Layer scopes the client key with its policy name; the window remains a separate Store argument.
-Use distinct policy names when policies must not share usage.
-
-A valid Store result always has `used >= 1`. Returning `used == 0` is treated as a Store failure and
-follows the configured Store failure mode. `reset_after` is the remaining duration of the current
-window, not the originally configured duration.
-
-Store failures reject by default. Applications that explicitly prefer availability can select
-`StoreFailureMode::Allow`; the inner service is then called without claiming quota metadata.
+Policy implementations must return a normal rate-limited Decision when quota is exhausted. They
+reserve `RateLimitError::Policy` for cases where they cannot produce a trustworthy Decision. Policy
+failures reject by default. Applications that explicitly prefer availability can select
+`PolicyFailureMode::Allow`; the inner service is then called without claiming quota metadata.
 
 ## Fixed-window behavior
 
-The first increment starts a window. Later increments update usage but do not move its end time.
-After expiry, the next charged request starts a new window.
+`FixedWindow<S>` is the included policy. It delegates atomic fixed-window usage to a
+`FixedWindowStore`. The first increment starts a window. Later increments update usage but do not
+move its end time. After expiry, the next charged request starts a new window.
 
 The first `limit` charged requests are allowed. Request `limit + 1` is rejected, but still
 increments usage without extending the window. This behavior is predictable and inexpensive, but
 traffic may burst around a boundary: a caller can use the end of one window and the beginning of the
 next in quick succession.
 
-Sliding windows, token buckets, weighted requests, and refunds are outside the current interface.
+## GCRA behavior
+
+The optional `MemoryGcra`, `RedisGcra`, and `PostgresGcra` policies use the generic cell rate
+algorithm (GCRA): a quota replenishes continuously, while `burst` is the total capacity a fresh
+key can spend immediately. Each currently has a fixed request cost of one. `GcraQuota` rounds the
+emission interval up to whole microseconds so the built-in adapters do not exceed the requested
+long-term rate.
+
+The policies return the same `Decision` meanings but do not promise identical timing fields: Memory
+uses a process clock, Redis server time, and PostgreSQL database time after row locking. Choose
+Memory only for process-local enforcement; Redis and PostgreSQL share state across replicas. See
+[GCRA backends](gcra.md) for the common contract and its backend-specific guides.
+
+Sliding windows, token buckets, weighted requests, and refunds are not included in the current
+release.
 
 ## Responses and context
 
@@ -123,13 +119,12 @@ logging policy. The default factory returns:
 | --- | --- |
 | Rate limited | `429 Too Many Requests` |
 | Client key failure | `500 Internal Server Error` |
-| Quota failure | `500 Internal Server Error` |
-| Store failure | `503 Service Unavailable` |
+| Policy failure | `503 Service Unavailable` |
 
 Allowed requests receive `RateLimitContext` in their extensions. Its policy entries contain the
-policy name, resolved limit, configured window, used quota, and reset duration. Remaining quota is
-available through `Policy::remaining()`. The context is absent on bypass and fail-open paths;
-downstream code should treat absence as “no trustworthy limiter metadata,” not as “unlimited.”
+policy name and `Decision`. Use `decision.remaining()` for remaining capacity. The context is absent
+on bypass and fail-open paths; downstream code should treat absence as “no trustworthy limiter
+metadata,” not as “unlimited.”
 
 Nested Layers append policies instead of overwriting context or response fields. See
 [Rate limit fields](rate-limit-fields.md) for the wire representation.
@@ -137,7 +132,7 @@ Nested Layers append policies instead of overwriting context or response fields.
 ## Request bypass
 
 `RateLimitBuilder::skip` accepts a synchronous predicate over the request head. A bypassed request
-reaches the inner service without key extraction, quota resolution, Store usage, response fields, or
+reaches the inner service without key extraction, policy charging, response fields, or
 `RateLimitContext`.
 
 Only use application-trusted headers or extensions in this predicate. Prefer a validated identity
@@ -156,8 +151,8 @@ fields are appended in composition order.
 
 `RateLimit` implements `Service` when its wrapped Service implements `Clone`. During
 `RateLimit::call`, the middleware replaces the wrapped Service with a clone and moves the exact
-instance observed ready into `ResponseFuture`. Key extraction begins in the outer call, quota
-resolution and Store access run while the response Future is polled, and `Inner::call` runs only
+instance observed ready into `ResponseFuture`. Key extraction begins in the outer call, policy
+charging runs while the response Future is polled, and `Inner::call` runs only
 after the request is allowed. This preserves Tower's readiness contract while leaving the middleware
 ready for a later request. Application code should still apply timeouts and load-shedding at the
 appropriate service boundaries.

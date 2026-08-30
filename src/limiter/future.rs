@@ -1,4 +1,4 @@
-//! The unboxed request-execution state machine for the rate-limit service.
+//! The unboxed request-execution state machine for the rate-limit Service.
 
 use std::{
     future::Future,
@@ -11,27 +11,20 @@ use http::{Request, Response};
 use pin_project_lite::pin_project;
 
 use super::{
-    LimitProvider, RateLimitConfig, RateLimitError,
-    policy::{Policy, ResponseMetadata, append_context, make_key},
+    RateLimitConfig, RateLimitError,
+    policy::{PolicyDecision, RateLimitPolicy, ResponseMetadata, append_context},
     response::{MiddlewareResponse, ResponseFactory, append_inner_response_headers},
-    store::{Store, StoreFailureMode},
+    store::PolicyFailureMode,
 };
 
 pin_project! {
     #[project = StateProj]
     #[project_replace = StateProjReplace]
-    enum State<ReqBody, LimitFut, StoreFut, InnerFut> {
-        Limit {
+    enum State<ReqBody, PolicyFut, InnerFut> {
+        Policy {
             #[pin]
-            future: LimitFut,
+            future: PolicyFut,
             request: Request<ReqBody>,
-            key: String,
-        },
-        Store {
-            #[pin]
-            future: StoreFut,
-            request: Request<ReqBody>,
-            limit: u64,
         },
         Inner {
             #[pin]
@@ -47,40 +40,34 @@ pin_project! {
 
 pin_project! {
     /// Response future for [`super::RateLimit`].
-    pub struct ResponseFuture<ReqBody, Inner, S, P, F>
+    pub struct ResponseFuture<ReqBody, Inner, P, F>
         where
         Inner: tower_service::Service<Request<ReqBody>>,
-        P: LimitProvider,
-        S: Store,
+        P: RateLimitPolicy,
     {
         #[pin]
-        state: State<ReqBody, P::Future, S::Future, Inner::Future>,
+        state: State<ReqBody, P::Future, Inner::Future>,
         inner: Inner,
-        store: S,
         config: Arc<RateLimitConfig>,
         factory: F,
     }
 }
 
-impl<ReqBody, Inner, S, P, F> ResponseFuture<ReqBody, Inner, S, P, F>
+impl<ReqBody, Inner, P, F> ResponseFuture<ReqBody, Inner, P, F>
 where
     Inner: tower_service::Service<Request<ReqBody>>,
-    S: Store,
-    P: LimitProvider,
+    P: RateLimitPolicy,
 {
     pub(crate) fn new(
         request: Request<ReqBody>,
         inner: Inner,
-        store: S,
-        key: String,
         future: P::Future,
         config: Arc<RateLimitConfig>,
         factory: F,
     ) -> Self {
         Self {
-            state: State::Limit { request, key, future },
+            state: State::Policy { request, future },
             inner,
-            store,
             config,
             factory,
         }
@@ -90,7 +77,6 @@ where
         request: Request<ReqBody>,
         error: RateLimitError,
         inner: Inner,
-        store: S,
         config: Arc<RateLimitConfig>,
         factory: F,
     ) -> Self {
@@ -99,7 +85,6 @@ where
                 response: MiddlewareResponse::Error(request, error),
             },
             inner,
-            store,
             config,
             factory,
         }
@@ -108,7 +93,6 @@ where
     pub(crate) fn skipped(
         request: Request<ReqBody>,
         mut inner: Inner,
-        store: S,
         config: Arc<RateLimitConfig>,
         factory: F,
     ) -> Self {
@@ -116,18 +100,16 @@ where
         Self {
             state: State::Inner { future, metadata: None },
             inner,
-            store,
             config,
             factory,
         }
     }
 }
 
-impl<ReqBody, ResBody, Inner, S, P, F> Future for ResponseFuture<ReqBody, Inner, S, P, F>
+impl<ReqBody, ResBody, Inner, P, F> Future for ResponseFuture<ReqBody, Inner, P, F>
 where
     Inner: tower_service::Service<Request<ReqBody>, Response = Response<ResBody>>,
-    S: Store,
-    P: LimitProvider,
+    P: RateLimitPolicy,
     F: ResponseFactory<ReqBody, ResBody>,
 {
     type Output = Result<Response<ResBody>, Inner::Error>;
@@ -137,54 +119,23 @@ where
 
         loop {
             match this.state.as_mut().project() {
-                StateProj::Limit { future, .. } => {
+                StateProj::Policy { future, .. } => {
                     let result = ready!(future.poll(cx));
-                    let StateProjReplace::Limit { request, key, .. } = this.state.as_mut().project_replace(State::Done)
+                    let StateProjReplace::Policy { request, .. } = this.state.as_mut().project_replace(State::Done)
                     else {
-                        unreachable!("rate-limit future state changed while polling Limit")
+                        unreachable!("rate-limit future state changed while polling Policy")
                     };
 
-                    match result {
-                        Err(error) => {
-                            let response = MiddlewareResponse::Error(request, error);
-                            this.state.as_mut().project_replace(State::Ready { response });
-                        },
-                        Ok(limit) => {
-                            let mut key = make_key(&this.config.policy_name, &key);
-                            if let Some(encoder) = this.config.key_encoder.as_ref() {
-                                key = encoder(&key);
-                            }
-                            let store_future = this.store.increment(&key, this.config.window);
-                            this.state.as_mut().project_replace(State::Store {
-                                request,
-                                future: store_future,
-                                limit,
-                            });
-                        },
-                    }
-                },
-                StateProj::Store { future, .. } => {
-                    let result = ready!(future.poll(cx));
-                    let StateProjReplace::Store { request, limit, .. } =
-                        this.state.as_mut().project_replace(State::Done)
-                    else {
-                        unreachable!("rate-limit future state changed while polling Store")
-                    };
-
-                    let policy = result.and_then(|usage| {
-                        Policy::from_usage(this.config.policy_name.clone(), this.config.window, limit, usage)
-                    });
-
-                    let next_state = match policy {
+                    let next_state = match result {
                         Err(error) => {
                             #[cfg(feature = "tracing")]
-                            trace_store_failure(
+                            trace_policy_failure(
                                 &error,
-                                this.config.store_failure_mode,
+                                this.config.policy_failure_mode,
                                 &this.config.policy_name,
-                                this.config.store_failure_tracing_level,
+                                this.config.policy_failure_tracing_level,
                             );
-                            if this.config.store_failure_mode == StoreFailureMode::Allow {
+                            if this.config.policy_failure_mode == PolicyFailureMode::Allow {
                                 State::Inner {
                                     future: this.inner.call(request),
                                     metadata: None,
@@ -195,9 +146,10 @@ where
                                 }
                             }
                         },
-                        Ok(policy) => {
-                            let metadata = ResponseMetadata::new(policy, this.config.rate_limit_fields);
-                            if metadata.policy.is_rate_limited() {
+                        Ok(decision) => {
+                            let policy_decision = PolicyDecision::new(this.config.policy_name.clone(), decision);
+                            let metadata = ResponseMetadata::new(policy_decision, this.config.rate_limit_fields);
+                            if decision.is_rate_limited() {
                                 State::Ready {
                                     response: MiddlewareResponse::RateLimited(request, metadata),
                                 }
@@ -217,7 +169,7 @@ where
                     let result = ready!(future.poll(cx));
                     let StateProjReplace::Inner { metadata, .. } = this.state.as_mut().project_replace(State::Done)
                     else {
-                        unreachable!("rate-limit future state changed while polling inner service")
+                        unreachable!("rate-limit future state changed while polling inner Service")
                     };
                     return Poll::Ready(result.map(|response| append_inner_response_headers(response, metadata)));
                 },
@@ -227,36 +179,34 @@ where
                     };
                     return Poll::Ready(Ok(response.finalize(this.factory)));
                 },
-                StateProj::Done { .. } => {
-                    panic!("rate-limit response future polled after completion")
-                },
+                StateProj::Done { .. } => panic!("rate-limit response future polled after completion"),
             }
         }
     }
 }
 
 #[cfg(feature = "tracing")]
-fn trace_store_failure(
+fn trace_policy_failure(
     error: &RateLimitError,
-    failure_mode: StoreFailureMode,
+    failure_mode: PolicyFailureMode,
     policy_name: &str,
     level: tracing::Level,
 ) {
     let failure_mode = match failure_mode {
-        StoreFailureMode::Reject => "reject",
-        StoreFailureMode::Allow => "allow",
+        PolicyFailureMode::Reject => "reject",
+        PolicyFailureMode::Allow => "allow",
     };
 
     macro_rules! emit {
         ($level:expr) => {
             tracing::event!(
-                target: "tower_rate_limiter::store",
+                target: "tower_rate_limiter::policy",
                 $level,
-                event = "store_failure",
+                event = "policy_failure",
                 policy_name,
                 failure_mode,
                 error_code = error.code(),
-                "rate-limit Store failed"
+                "rate-limit Policy failed"
             )
         };
     }

@@ -1,11 +1,11 @@
 [package]
 name = "tower-rate-limiter"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.96.0"
-description = "Keyed fixed-window rate limiting middleware for Tower"
+description = "Keyed Fixed Window and multi-backend GCRA rate limiting middleware for Tower"
 readme = "README.md"
-keywords = ["rate-limit", "tower", "axum", "redis"]
+keywords = ["rate-limit", "tower", "axum", "redis", "gcra"]
 categories = ["web-programming::http-server"]
 homepage = "https://github.com/nivek-ph/tower-rate-limiter"
 repository = "https://github.com/nivek-ph/tower-rate-limiter"
@@ -13,12 +13,15 @@ license = "MIT OR Apache-2.0"
 authors = ["nivek-ph <h499871809@gmail.com>"]
 include = [
 	"/src/**",
+	"/migrations/**",
+	"/benchmarks/benchmark_server.rs",
 	"/examples/**",
 	"/tests/**",
 	"/Cargo.toml",
 	"/README.md",
 	"/LICENSE-APACHE",
 	"/LICENSE-MIT",
+	"/THIRD_PARTY_NOTICES.md",
 ]
 
 [package.metadata.docs.rs]
@@ -27,8 +30,11 @@ all-features = true
 [features]
 default = ["memory"]
 memory = ["dep:moka"]
+memory-gcra = ["dep:governor"]
 redis = ["dep:redis"]
 redis-lua = ["redis", "redis/script"]
+redis-gcra = ["redis", "redis/script"]
+postgres-gcra = ["dep:sqlx"]
 runtime-tokio = ["redis?/tokio-comp"]
 runtime-smol = ["redis?/smol-comp"]
 axum = ["http-extract/axum"]
@@ -48,23 +54,21 @@ tracing = { version = "0.1", default-features = false, features = [
 ], optional = true }
 
 moka = { version = "0.12", features = ["sync"], optional = true }
+governor = { version = "0.10.4", optional = true }
 
 # optional dependencies
 redis = { version = "1", default-features = false, optional = true }
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"], optional = true }
 
 [dev-dependencies]
 axum = "0.8"
 dotenvy = "0.15"
 smol = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tower = { version = "0.5", features = ["util"] }
 
 [[example]]
 name = "tower_memory"
-required-features = ["memory"]
-
-[[example]]
-name = "tower_dynamic"
 required-features = ["memory"]
 
 [[example]]
@@ -97,3 +101,29 @@ required-features = ["redis", "runtime-tokio"]
 name = "redis_store_smol"
 path = "tests/redis/smol.rs"
 required-features = ["redis", "runtime-smol"]
+
+[[test]]
+name = "redis_gcra_interfaces"
+required-features = ["redis-gcra", "runtime-tokio"]
+
+[[test]]
+name = "redis_gcra_tokio"
+path = "tests/redis_gcra/tokio.rs"
+required-features = ["redis-gcra", "runtime-tokio"]
+
+[[test]]
+name = "redis_gcra_smol"
+path = "tests/redis_gcra/smol.rs"
+required-features = ["redis-gcra", "runtime-smol"]
+
+[[test]]
+name = "memory_gcra"
+required-features = ["memory-gcra"]
+
+[[test]]
+name = "postgres_gcra_interfaces"
+required-features = ["postgres-gcra"]
+
+[[test]]
+name = "postgres_gcra"
+required-features = ["postgres-gcra"]
