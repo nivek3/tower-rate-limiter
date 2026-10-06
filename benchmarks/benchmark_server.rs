@@ -2,7 +2,7 @@ use std::{env, error::Error, net::SocketAddr, time::Duration};
 
 use axum::{Router, http::StatusCode, routing::get};
 use http::Request;
-use tower_rate_limiter::{KeyExtractor, MemoryStore, RateLimitError, RateLimitLayer, RedisStore};
+use tower_rate_limiter::{FixedWindow, KeyExtractor, MemoryStore, RateLimitError, RateLimitLayer, RedisStore};
 
 const DEFAULT_ADDRESS: &str = "127.0.0.1:3000";
 const DEFAULT_LIMIT: u64 = 1_000_000_000;
@@ -68,15 +68,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let memory_limiter = RateLimitLayer::builder(BenchmarkKeyExtractor)
         .policy_name(POLICY_NAME)
-        .limit(limit)
-        .window(window)
-        .with_store(MemoryStore::new())
+        .with_policy(FixedWindow::new(MemoryStore::new(), limit, window)?)
         .build()?;
     let redis_limiter = RateLimitLayer::builder(BenchmarkKeyExtractor)
         .policy_name(POLICY_NAME)
-        .limit(limit)
-        .window(window)
-        .with_store(RedisStore::new(redis_connection).with_namespace(redis_namespace))
+        .with_policy(FixedWindow::new(
+            RedisStore::new(redis_connection).with_namespace(redis_namespace),
+            limit,
+            window,
+        )?)
         .build()?;
 
     let app = Router::new()

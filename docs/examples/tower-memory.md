@@ -1,7 +1,8 @@
 # Tower with MemoryStore
 
 This is the smallest complete example. It defines a `KeyExtractor`, creates an explicit
-process-local Store, builds a policy, and composes the resulting Layer around a Tower service.
+process-local `FixedWindowStore`, constructs a policy, and composes the resulting Layer around a
+Tower service.
 
 ```sh
 cargo run --example tower_memory --features memory

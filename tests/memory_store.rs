@@ -2,9 +2,9 @@
 
 use std::{sync::Arc, thread, time::Duration};
 
-use tower_rate_limiter::{MemoryStore, Store, Usage};
+use tower_rate_limiter::{FixedWindowStore, FixedWindowUsage, MemoryStore};
 
-fn increment(store: &MemoryStore, key: &str, window: Duration) -> Usage {
+fn increment(store: &MemoryStore, key: &str, window: Duration) -> FixedWindowUsage {
     store
         .increment(key, window)
         .into_inner()

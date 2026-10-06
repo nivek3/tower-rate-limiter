@@ -1,6 +1,6 @@
 use std::{env, future::Future, time::Duration};
 
-use tower_rate_limiter::{RedisStore, Store};
+use tower_rate_limiter::{FixedWindowStore, RedisStore};
 
 const KEY: &str = "opaque:policy:window:client";
 const CONCURRENT_REQUESTS: usize = 16;
