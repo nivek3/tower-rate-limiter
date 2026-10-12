@@ -7,18 +7,18 @@ applications still depend on a compatible Axum version themselves.
 
 Axum requires every installed middleware response Future to be `Send + 'static`. Concrete limiter
 components are checked automatically when a Layer is passed directly to `Router::layer`, so the
-built-in Stores normally require no annotations. A generic helper must state its runtime bounds,
-such as `S: Store + Send + Sync + 'static` and `S::Future: Send + 'static`; the core Store interface
-does not impose them because local Tower executors may use non-`Send` futures. See
-[Custom Store](custom-components.md#custom-store) for concrete and generic examples.
+built-in policies normally require no annotations. A generic helper must state its runtime bounds,
+such as `P: RateLimitPolicy + Send + Sync + 'static` and `P::Future: Send + 'static`; the core
+policy interface does not impose them because local Tower executors may use non-`Send` futures. See
+[Custom components](custom-components.md) for concrete and generic examples.
 
 ## Axum
 
-Enable Axum integration together with the default in-memory Store:
+Enable Axum integration together with the default in-memory fixed-window store:
 
 ```toml
 [dependencies]
-tower-rate-limiter = { version = "0.1", features = ["axum", "memory"] }
+tower-rate-limiter = { version = "0.2", features = ["axum", "memory"] }
 ```
 
 `IpKeyExtractor` reads Axum's `ConnectInfo<SocketAddr>` as the peer address.
@@ -64,28 +64,61 @@ Enable Redis when multiple processes need to share usage:
 
 ```toml
 [dependencies]
-tower-rate-limiter = { version = "0.1", default-features = false, features = ["redis", "runtime-tokio"] }
+tower-rate-limiter = { version = "0.2", default-features = false, features = ["redis", "runtime-tokio"] }
 ```
 
-`RedisStore` accepts an already established `redis::aio::MultiplexedConnection`. The application
-continues to own URL parsing, connection setup, reconnection strategy, and shutdown.
+`RedisStore` implements `FixedWindowStore` and accepts an already established
+`redis::aio::MultiplexedConnection`. Construct `FixedWindow` with it. The application continues to
+own URL parsing, connection setup, reconnection strategy, and shutdown.
 
 The `redis` feature uses one `MULTI`/`EXEC` transaction to initialize the counter, increment it, and
 read its TTL. Use `redis-lua` in place of `redis` to perform the same fixed-window operation with
 Lua. Either implementation must be combined with `runtime-tokio` or `runtime-smol`. A missing or
-non-positive TTL is surfaced as a Store error rather than repaired implicitly.
+non-positive TTL is surfaced as a policy error rather than repaired implicitly.
 
 Redis expiry uses whole milliseconds. Sub-millisecond portions are truncated, and a window shorter
-than one millisecond is rejected. The in-memory Store retains `Duration`/`Instant` precision.
+than one millisecond is rejected. The in-memory store retains `Duration`/`Instant` precision.
 
 Redis adds an `rl:` transport marker and the optional namespace after it receives the scoped key.
 Use a namespace to separate deployments or applications sharing one Redis database. Namespace is a
 transport concern; use distinct policy names for distinct rate-limit policies.
 
 See [Axum with Redis](examples/axum-redis.md) for complete connection setup, namespacing, a shared
-Store, and custom error responses.
+fixed-window policy, and custom error responses.
 
-### Choosing a Store
+### GCRA policies
+
+`MemoryGcra`, `RedisGcra`, and `PostgresGcra` use the same `GcraQuota` and `Decision` contract.
+Use `MemoryGcra` with `memory-gcra` for one process; it has no runtime or external dependency.
+Use `PostgresGcra` with `postgres-gcra` and a caller-owned SQLx Tokio `PgPool` after applying
+`migrations/postgres/0001_gcra.sql` through the application's migration runner. The remaining
+example shows Redis-specific connection setup.
+
+`GcraQuota` rounds its emission interval up to whole microseconds. Backend clocks and state engines
+mean equivalent policies do not promise identical per-request timing fields. See [GCRA backends](gcra.md)
+before choosing a shared state service.
+
+#### Redis
+
+`RedisGcra` is a separate shared policy for a continuously replenished rate. Enable
+`redis-gcra` with a runtime feature (`runtime-tokio` or `runtime-smol`), construct it
+from the same established `MultiplexedConnection`, and pass it to `with_policy(...)`:
+
+```rust,no_run
+use std::time::Duration;
+use tower_rate_limiter::{GcraQuota, RedisGcra};
+
+# let connection: redis::aio::MultiplexedConnection = todo!();
+let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+let policy = RedisGcra::new(connection, quota).with_namespace("my-service");
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`burst` is the total instantaneous capacity; this first version charges a cost of one per request.
+The policy uses Redis server time and a Lua artifact, so it needs the Redis ACL commands described
+in [Redis GCRA](redis-gcra.md). It is not a `redis-cell` or Redis Stack integration.
+
+### Choosing a fixed-window store
 
 
 | Requirement                       | `MemoryStore` | `RedisStore`                               |
@@ -98,7 +131,7 @@ Store, and custom error responses.
 
 
 Cloning `MemoryStore` shares its in-process state. Creating separate `MemoryStore::new()` values
-creates separate counter sets. With multiple application replicas, each in-memory Store enforces
+creates separate counter sets. With multiple application replicas, each in-memory store enforces
 its own quota, so the effective aggregate allowance can grow with replica count.
 
 Each cached entry expires with its fixed window. Moka treats the entry as absent after that point

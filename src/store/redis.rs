@@ -7,7 +7,7 @@ use redis::aio::MultiplexedConnection;
 #[cfg(feature = "redis-lua")]
 use redis::Script;
 
-use crate::{RateLimitError, Store, Usage};
+use crate::{FixedWindowStore, FixedWindowUsage, RateLimitError};
 
 const REDIS_PREFIX: &str = "rl:";
 
@@ -53,11 +53,11 @@ impl From<redis::RedisError> for RedisStoreError {
 /// Convert the RedisStoreError to a RateLimitError.
 impl From<RedisStoreError> for RateLimitError {
     fn from(error: RedisStoreError) -> Self {
-        RateLimitError::Store("redis_store_error".into(), error.to_string())
+        RateLimitError::Policy("redis_store_error".into(), error.to_string())
     }
 }
 
-/// Redis-backed implementation of the common fixed-window [`Store`] seam.
+/// Redis-backed implementation of the common [`FixedWindowStore`] seam.
 ///
 /// The connection is supplied by the caller and is cloned for each increment. A Redis
 /// `MultiplexedConnection` clone shares its underlying connection and does not transfer
@@ -91,8 +91,8 @@ impl RedisStore {
     }
 }
 
-impl Store for RedisStore {
-    type Future = Pin<Box<dyn Future<Output = Result<Usage, RateLimitError>> + Send>>;
+impl FixedWindowStore for RedisStore {
+    type Future = Pin<Box<dyn Future<Output = Result<FixedWindowUsage, RateLimitError>> + Send>>;
 
     fn increment(&self, key: &str, window: Duration) -> Self::Future {
         let window_millis = match checked_window_millis(window) {
@@ -156,11 +156,11 @@ fn checked_window_millis(window: Duration) -> Result<i64, RedisStoreError> {
     Ok(window_millis as i64)
 }
 
-/// Convert the atomic increment result `(count, PTTL milliseconds)` into [`Usage`].
+/// Convert the atomic increment result `(count, PTTL milliseconds)` into [`FixedWindowUsage`].
 ///
 /// Redis reports `-1` for a persistent key and `-2` for a missing key. Both, as well as a
 /// zero TTL, are errors because the fixed window cannot be trusted without a positive TTL.
-fn usage_from_increment_result((used, reset_after_millis): (i64, i64)) -> Result<Usage, RedisStoreError> {
+fn usage_from_increment_result((used, reset_after_millis): (i64, i64)) -> Result<FixedWindowUsage, RedisStoreError> {
     if used < 1 {
         return Err(RedisStoreError::InvalidUsage(used));
     }
@@ -168,7 +168,7 @@ fn usage_from_increment_result((used, reset_after_millis): (i64, i64)) -> Result
         return Err(RedisStoreError::InvalidResetAfter(reset_after_millis));
     }
 
-    Ok(Usage {
+    Ok(FixedWindowUsage {
         used: used as u64,
         reset_after: Duration::from_millis(reset_after_millis as u64),
     })
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn redis_store_implements_the_common_store_seam() {
-        fn assert_store<T: Store>() {}
+        fn assert_store<T: FixedWindowStore>() {}
         assert_store::<RedisStore>();
     }
 
@@ -197,7 +197,7 @@ mod tests {
         let usage = usage_from_increment_result((4, 1_500)).expect("valid Redis increment result");
         assert_eq!(
             usage,
-            Usage {
+            FixedWindowUsage {
                 used: 4,
                 reset_after: Duration::from_millis(1_500),
             }
@@ -261,7 +261,7 @@ mod tests {
 
         assert_eq!(
             error,
-            RateLimitError::Store(
+            RateLimitError::Policy(
                 String::from("redis_store_error"),
                 String::from("redis returned invalid usage 0"),
             )

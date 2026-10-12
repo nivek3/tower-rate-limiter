@@ -2,7 +2,7 @@
 
 mod redis_store;
 
-use tower_rate_limiter::Store;
+use tower_rate_limiter::FixedWindowStore;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn increments_share_one_fixed_window() {

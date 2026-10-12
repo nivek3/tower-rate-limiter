@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add `MemoryGcra`, `RedisGcra`, and `PostgresGcra` policies behind a common `GcraQuota` and
+  `Decision` contract. Memory delegates to governor; Redis uses an attributed upstream Lua
+  artifact on ordinary Redis; PostgreSQL uses an application-applied, versioned SQL migration.
+- Add explicit Memory GCRA key pruning and an approximate tracked-key count for application-owned
+  high-cardinality housekeeping.
+- Add the PostgreSQL GCRA migration at `migrations/postgres/0001_gcra.sql`; applications retain
+  ownership of schema installation, database permissions, pool lifecycle, and cleanup scheduling.
+- Add algorithm-neutral `RateLimitPolicy` and `Decision` interfaces for custom policies.
+
+### Changed
+
+- Move fixed-window limiting behind `FixedWindow<S: FixedWindowStore>` and configure layers with
+  `RateLimitBuilder::with_policy`.
+- Source response metadata, retry timing, failure handling, and request context from policy
+  decisions.
+
+### Removed
+
+- Remove the request-level `LimitProvider` and the old Store-driven outer limiter interface.
+
+### Migration
+
+- Version 0.2 is a breaking release. Existing Store-based builders must wrap fixed-window stores in
+  `FixedWindow` and pass the resulting policy to `with_policy`.
+
 ## [0.1.6](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.5...v0.1.6) - 2026-08-13
 
 ### Added
