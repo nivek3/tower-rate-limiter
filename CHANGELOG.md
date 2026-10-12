@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.7](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.6...v0.1.7) - 2026-08-20
+
+### Added
+
+- add Redis path HTTP benchmark harness ([#30](https://github.com/nivek-ph/tower-rate-limiter/pull/30))
+
+### Other
+
+- *(deps)* bump redis in the cargo-dependencies group ([#32](https://github.com/nivek-ph/tower-rate-limiter/pull/32))
+- *(deps)* bump the cargo-dependencies group across 1 directory with 2 updates ([#28](https://github.com/nivek-ph/tower-rate-limiter/pull/28))
+- update README for improved navigation
+
 ## [0.1.6](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.5...v0.1.6) - 2026-08-13
 
 ### Added
