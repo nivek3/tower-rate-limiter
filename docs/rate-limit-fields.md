@@ -17,9 +17,9 @@ RateLimit: "public-api";r=99;t=60
 ```
 
 - `q` is the configured request quota.
-- `w` is the configured fixed-window duration.
+- `w` is the policy's advertised window duration.
 - `r` is the quota remaining after the current request.
-- `t` is the Store-reported time until reset.
+- `t` is the policy-reported time until reset.
 
 The optional quota-unit (`qu`) and partition-key (`pk`) parameters are not emitted. Omitting `qu`
 means the quota unit is requests.
@@ -53,7 +53,7 @@ quota metadata. A rejected request still receives:
 Retry-After: 42
 ```
 
-`Retry-After` reflects the remaining active window rounded up to seconds.
+`Retry-After` reflects the policy's earliest retry duration rounded up to seconds.
 
 ## Nested policies
 

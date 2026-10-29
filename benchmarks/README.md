@@ -33,9 +33,9 @@ Results are written by default to `benchmarks/output/<timestamp>/`; set `BENCH_O
 different directory. Each run includes raw `wrk` output, `summary.csv`, and a page-style
 `report.txt` with throughput, latency percentiles, and error counts.
 
-The benchmark defaults to a one-hour policy window so the full workload measures the steady-state
-Store path without crossing a Redis expiration boundary. Window rollover behavior is outside this
-throughput benchmark and should be tested separately.
+The benchmark defaults to a one-hour fixed-window policy so the full workload measures the
+steady-state `FixedWindowStore` path without crossing a Redis expiration boundary. Window rollover
+behavior is outside this throughput benchmark and should be tested separately.
 
 For the canonical workload, run `wrk` inside the Compose network so requests go directly to the
 `bench` container instead of crossing the host-to-Docker Desktop port boundary. Commit the source

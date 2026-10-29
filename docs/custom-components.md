@@ -1,7 +1,8 @@
 # Custom components
 
-The core has four application-facing seams. Implement only the ones whose policy belongs to your
-application; the included fixed provider, default response factory, and Stores cover common cases.
+The core has four application-facing seams. Implement only the ones whose behavior belongs to your
+application; `FixedWindow`, the default response factory, and the included fixed-window stores cover
+common cases.
 
 ## Custom client identity
 
@@ -39,111 +40,102 @@ The key only needs to implement `Display`. Prefer a stable, non-secret identifie
 and credential validation should happen in an earlier application layer. Normalize identity once
 at this boundary rather than composing several extractors.
 
-## Request-derived quota
+## Custom policy
 
-`LimitProvider` returns a concrete future so it can perform local or asynchronous resolution:
+`RateLimitPolicy` owns one rate-limit algorithm and quota. It receives a complete policy-scoped key
+and returns an asynchronous `Decision`:
 
 ```rust,ignore
 use std::future::{Ready, ready};
-use http::Request;
-use tower_rate_limiter::{LimitProvider, RateLimitError};
-
-struct AccountPlan {
-    requests_per_window: u64,
-}
+use std::time::Duration;
+use tower_rate_limiter::{Decision, RateLimitError, RateLimitPolicy};
 
 #[derive(Clone, Copy)]
-struct PlanQuota;
+struct AlwaysAllow;
 
-impl LimitProvider for PlanQuota {
-    type Future = Ready<Result<u64, RateLimitError>>;
+impl RateLimitPolicy for AlwaysAllow {
+    type Future = Ready<Result<Decision, RateLimitError>>;
 
-    fn limit<B>(&self, request: &Request<B>) -> Self::Future {
-        let limit = request
-            .extensions()
-            .get::<AccountPlan>()
-            .map_or(10, |plan| plan.requests_per_window);
-        ready(Ok(limit))
+    fn check(&self, _key: String) -> Self::Future {
+        ready(Ok(Decision::allowed(100, Duration::from_secs(60), 99, Duration::from_secs(60))))
     }
 }
 ```
 
-A provider error must use `RateLimitError::Quota(code, message)`. It rejects before Store usage and
-never follows the Store fail-open setting.
+Return a normal `Decision::rate_limited(...)` when the quota is exhausted. Reserve
+`RateLimitError::Policy(code, message)` for a backend or algorithm failure that prevents a
+trustworthy Decision. Such errors follow the configured `PolicyFailureMode`.
 
-## Custom Store
+## Custom fixed-window storage
 
-A Store must atomically increment the complete opaque key and preserve fixed-window semantics. The
-public interface is:
+`FixedWindowStore` is the storage seam used by `FixedWindow`. A store must atomically increment the
+complete opaque key and preserve fixed-window semantics:
 
 ```rust,ignore
 use std::{future::Future, time::Duration};
-use tower_rate_limiter::{RateLimitError, Usage};
+use tower_rate_limiter::{FixedWindowStore, FixedWindowUsage, RateLimitError};
 
 trait StoreShape: Clone {
-    type Future: Future<Output = Result<Usage, RateLimitError>>;
+    type Future: Future<Output = Result<FixedWindowUsage, RateLimitError>>;
     fn increment(&self, key: &str, window: Duration) -> Self::Future;
 }
 ```
 
-The illustrative `StoreShape` mirrors `tower_rate_limiter::Store`. An implementation must:
+The illustrative `StoreShape` mirrors `tower_rate_limiter::FixedWindowStore`. An implementation
+must:
 
 - make increment and first-window creation one atomic operation;
 - start expiry only on the first increment;
 - avoid extending expiry on later or rejected requests;
 - return usage including the current increment;
 - return `used >= 1` and the remaining `reset_after` duration;
-- make clones of one Store value observe the same counters;
-- map backend failures to `RateLimitError::Store(code, message)`.
+- make clones of one store value observe the same counters;
+- map backend failures to `RateLimitError::Policy(code, message)`.
 
-The Store receives a policy-scoped key. It must treat that string as opaque and must not reconstruct
+The store receives a policy-scoped key. It must treat that string as opaque and must not reconstruct
 client or policy identity from its format.
 
-`Store` requires `Clone` because `RateLimitLayer` clones it into each produced Service and
-`RateLimit::call` clones it into each request's `ResponseFuture`. It deliberately has no
-unconditional `Send + Sync + 'static` supertraits, and its Future is not universally required to be
-`Send + 'static`. This keeps the core usable by local Tower executors. Add framework-specific bounds
-where the Store enters that framework.
+`FixedWindowStore` requires `Clone` because `FixedWindow` clones it into each policy check. It
+deliberately has no unconditional `Send + Sync + 'static` supertraits, and its Future is not
+universally required to be `Send + 'static`. This keeps the core usable by local Tower executors.
+Add framework-specific bounds where the policy enters that framework.
 
-When a concrete Store is passed directly to Axum, no extra annotations are normally needed. Rust
+When a concrete policy is passed directly to Axum, no extra annotations are normally needed. Rust
 derives whether the resulting `ResponseFuture` is `Send + 'static` from its concrete fields and
-futures, so built-in Stores and custom Stores whose futures already satisfy those properties compile
-directly:
+futures, so built-in policies and custom policies whose futures already satisfy those properties
+compile directly:
 
 ```rust,ignore
 let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
-    .with_store(MyStore::new())
+    .with_policy(MyPolicy::new())
     .build()?;
 
 let app = Router::new().layer(limiter);
 ```
 
 Explicit bounds become necessary when the integration is hidden behind a generic function. Axum
-requires the final middleware Future to be `Send + 'static`, but `S: Store` alone intentionally does
-not promise that. State the framework requirement on the generic integration point:
+requires the final middleware Future to be `Send + 'static`, but `P: RateLimitPolicy` alone
+intentionally does not promise that. State the framework requirement on the generic integration
+point:
 
 ```rust,ignore
-fn add_rate_limit<S>(router: Router, store: S) -> Result<Router, ConfigError>
+fn add_rate_limit<P>(router: Router, policy: P) -> Result<Router, ConfigError>
 where
-    S: Store + Send + Sync + 'static,
-    S::Future: Send + 'static,
+    P: RateLimitPolicy + Send + Sync + 'static,
+    P::Future: Send + 'static,
 {
     let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
-        .with_store(store)
+        .with_policy(policy)
         .build()?;
 
     Ok(router.layer(limiter))
 }
 ```
 
-The same rule applies to other generic injected components: if a custom `LimitProvider` is used in
-an Axum helper, its future normally also needs `P::Future: Send + 'static`. The compiler reports the
-specific future or captured value that prevents the composed `ResponseFuture` from being `Send`.
-
-Earlier releases also placed `Send + Sync + 'static` and `Future: Send + 'static` on `Store`, so
-`S: Store` implied them automatically. After upgrading, generic framework helpers must state their
-actual runtime requirements explicitly. Concrete `RedisStore` and `MemoryStore` call sites usually
-need no additional annotations because the compiler can verify their implementations directly.
+The same rule applies when a helper accepts fixed-window storage and constructs `FixedWindow`
+itself: state `S: FixedWindowStore + Send + Sync + 'static` and `S::Future: Send + 'static` on the
+integration point. The compiler reports the specific future or captured value that prevents the
+composed `ResponseFuture` from being `Send`.
 
 ## Custom responses
 
@@ -166,10 +158,10 @@ impl<ReqBody, ResBody: Default> ResponseFactory<ReqBody, ResBody> for ApiRespons
 }
 ```
 
-Match `ResponseReason::RateLimited(policy)` to describe quota exhaustion. `policy` contains the
-resolved limit, configured window, current usage, reset duration, and `remaining()` quota. Match
-`ResponseReason::Error(...)` to map key, quota, and Store failures. The middleware adds
-`RateLimit`, `RateLimit-Policy`, and `Retry-After` after the factory returns where applicable.
+Match `ResponseReason::RateLimited(policy)` to describe quota exhaustion. `policy` carries the
+stable policy name and Decision. Match `ResponseReason::Error(...)` to map client-key and policy
+failures. The middleware adds `RateLimit`, `RateLimit-Policy`, and `Retry-After` after the factory
+returns where applicable.
 
 Avoid placing secrets, raw credentials, or connection details in stable error codes, diagnostic
 messages, response bodies, or logs.

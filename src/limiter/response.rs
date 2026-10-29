@@ -9,7 +9,7 @@ use http::{HeaderValue, Request, Response, StatusCode, header::HeaderName};
 
 use super::{
     error::RateLimitError,
-    policy::{Policy, ResponseMetadata},
+    policy::{PolicyDecision, ResponseMetadata},
 };
 
 /// The `RateLimit` header name.
@@ -48,9 +48,9 @@ pub enum RateLimitFields {
 /// The structured reason passed to a [`ResponseFactory`].
 #[derive(Debug)]
 pub enum ResponseReason {
-    /// The complete policy state after the request exceeded its resolved quota.
-    RateLimited(Policy),
-    /// The middleware could not resolve or charge the request's policy.
+    /// The named Policy Decision that rejected the Charged Request.
+    RateLimited(PolicyDecision),
+    /// The middleware could not resolve or charge the request's Policy.
     Error(RateLimitError),
 }
 
@@ -59,10 +59,8 @@ impl ResponseReason {
     pub const fn status_code(&self) -> StatusCode {
         match self {
             Self::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
-            Self::Error(RateLimitError::Key(_, _)) | Self::Error(RateLimitError::Quota(_, _)) => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            },
-            Self::Error(RateLimitError::Store(_, _)) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Error(RateLimitError::Key(_, _)) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Error(RateLimitError::Policy(_, _)) => StatusCode::SERVICE_UNAVAILABLE,
         }
     }
 }
@@ -106,7 +104,7 @@ impl<ReqBody> MiddlewareResponse<ReqBody> {
     {
         match self {
             Self::RateLimited(request, metadata) => {
-                let reason = ResponseReason::RateLimited(metadata.policy.clone());
+                let reason = ResponseReason::RateLimited(metadata.policy_decision.clone());
                 let response = factory.build(request, reason);
 
                 append_rate_limited_response_headers(response, metadata)
@@ -136,11 +134,12 @@ pub(super) fn append_inner_response_headers<B>(
 /// Rate Limit Fields still respect [`RateLimitFields`]. `Retry-After` is always added.
 fn append_rate_limited_response_headers<B>(response: Response<B>, metadata: ResponseMetadata) -> Response<B> {
     let mut response = append_rate_limit_fields(response, &metadata);
-    append_header(
-        &mut response,
-        RETRY_AFTER,
-        &ceil_seconds(metadata.policy.reset_after).to_string(),
-    );
+    let retry_after = metadata
+        .policy_decision
+        .decision()
+        .retry_after()
+        .expect("rate-limited Decision must include retry-after");
+    append_header(&mut response, RETRY_AFTER, &ceil_seconds(retry_after).to_string());
     response
 }
 
@@ -162,10 +161,11 @@ fn format_rate_limit_fields(metadata: &ResponseMetadata) -> Option<(String, Stri
         return None;
     }
 
-    let limit = metadata.policy.limit;
-    let remaining = metadata.policy.remaining();
-    let reset_after = ceil_seconds(metadata.policy.reset_after);
-    let window = ceil_seconds(metadata.policy.window);
+    let decision = metadata.policy_decision.decision();
+    let limit = decision.limit();
+    let remaining = decision.remaining();
+    let reset_after = ceil_seconds(decision.reset_after());
+    let window = ceil_seconds(decision.window());
 
     Some(match metadata.fields {
         RateLimitFields::Draft7 => (
@@ -173,15 +173,29 @@ fn format_rate_limit_fields(metadata: &ResponseMetadata) -> Option<(String, Stri
             format!("limit={limit}, remaining={remaining}, reset={reset_after}"),
         ),
         RateLimitFields::Draft11 => {
-            let policy_name = &metadata.policy.name;
+            let policy_name = quote_structured_string(metadata.policy_decision.name());
 
             (
-                format!(r#""{policy_name}";q={limit};w={window}"#),
-                format!(r#""{policy_name}";r={remaining};t={reset_after}"#),
+                format!("{policy_name};q={limit};w={window}"),
+                format!("{policy_name};r={remaining};t={reset_after}"),
             )
         },
         RateLimitFields::Disabled => return None,
     })
+}
+
+/// Quote one validated visible-ASCII value as an HTTP Structured Fields string.
+fn quote_structured_string(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for byte in value.bytes() {
+        if byte == b'"' || byte == b'\\' {
+            quoted.push('\\');
+        }
+        quoted.push(char::from(byte));
+    }
+    quoted.push('"');
+    quoted
 }
 
 /// Append a header to the response.

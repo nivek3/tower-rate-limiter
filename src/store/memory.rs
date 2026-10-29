@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{RateLimitError, Store, Usage};
+use crate::{FixedWindowStore, FixedWindowUsage, RateLimitError};
 
 /// Errors returned by the in-memory rate limit store.
 ///
@@ -31,7 +31,7 @@ pub enum MemoryStoreError {
 /// Convert the MemoryStoreError to a RateLimitError.
 impl From<MemoryStoreError> for RateLimitError {
     fn from(err: MemoryStoreError) -> Self {
-        RateLimitError::Store("memory_store_error".into(), err.to_string())
+        RateLimitError::Policy("memory_store_error".into(), err.to_string())
     }
 }
 
@@ -62,7 +62,7 @@ impl Expiry<String, Entry> for EntryExpiry {
     }
 }
 
-/// In-process Store whose clones share one counter set.
+/// In-process Fixed Window Store whose clones share one counter set.
 ///
 /// Entries expire with their fixed windows. Window durations use [`Duration`] and [`Instant`]
 /// directly, without reducing their precision before storage.
@@ -96,9 +96,8 @@ impl MemoryStore {
     }
 }
 
-/// Implement the Store trait for the MemoryStore.
-impl Store for MemoryStore {
-    type Future = Ready<Result<Usage, RateLimitError>>;
+impl FixedWindowStore for MemoryStore {
+    type Future = Ready<Result<FixedWindowUsage, RateLimitError>>;
 
     fn increment(&self, key: &str, window: Duration) -> Self::Future {
         ready(self.increment_usage(key, window).map_err(Into::into))
@@ -112,7 +111,7 @@ impl MemoryStore {
     ///
     /// # Errors
     /// Returns an error if the instant is out of range or the cache computation returns no entry.
-    fn increment_usage(&self, key: &str, window: Duration) -> Result<Usage, MemoryStoreError> {
+    fn increment_usage(&self, key: &str, window: Duration) -> Result<FixedWindowUsage, MemoryStoreError> {
         let entry = self
             .cache
             .entry_by_ref(key)
@@ -140,7 +139,7 @@ impl MemoryStore {
 
         let now = Instant::now();
 
-        Ok(Usage {
+        Ok(FixedWindowUsage {
             used: entry.used,
             reset_after: entry.expires_at.saturating_duration_since(now),
         })

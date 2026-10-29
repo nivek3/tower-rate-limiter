@@ -2,7 +2,7 @@ use std::{convert::Infallible, error::Error, future::ready, time::Duration};
 
 use http::{Request, Response};
 use tower::{Layer, service_fn};
-use tower_rate_limiter::{KeyExtractor, MemoryStore, RateLimitLayer};
+use tower_rate_limiter::{FixedWindow, KeyExtractor, MemoryStore, RateLimitLayer};
 
 #[derive(Clone, Copy)]
 struct StaticClient;
@@ -20,9 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let limiter = RateLimitLayer::builder(StaticClient)
         .policy_name("tower-example")
-        .limit(100)
-        .window(Duration::from_secs(60))
-        .with_store(MemoryStore::new())
+        .with_policy(FixedWindow::new(MemoryStore::new(), 100, Duration::from_secs(60))?)
         .build()?;
 
     let _service = limiter.layer(service_fn(|_request: Request<()>| {

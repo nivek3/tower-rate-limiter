@@ -1,33 +1,28 @@
-//! Builder and immutable configuration for the rate-limit layer.
+//! Builder and immutable configuration for the rate-limit Layer.
 
-use std::{fmt, sync::Arc, time::Duration};
+use std::{fmt, sync::Arc};
 
 use http::Request;
 
 use super::{
     error::ConfigError,
     layer::RateLimitLayer,
-    limit::LimitProvider,
+    policy::RateLimitPolicy,
     response::{DefaultResponseFactory, RateLimitFields},
-    store::{Store, StoreFailureMode},
+    store::PolicyFailureMode,
 };
 
-/// The minimum window duration allowed.
-const MINIMUM_WINDOW: Duration = Duration::from_millis(1);
-
-/// A callback to encode the scoped key before passing it to the [`crate::Store`].
+/// A callback to encode the scoped Client Key before passing it to the Policy.
 pub(crate) type KeyEncoder = Box<dyn Fn(&str) -> String + Send + Sync>;
 
 /// A callback that decides whether a request bypasses rate limiting.
 pub(crate) type SkipPredicate = Box<dyn Fn(&Request<()>) -> bool + Send + Sync>;
 
-/// Check if the request should be skipped based on the skip predicate.
 pub(crate) fn check_skip_predicate<B>(predicate: Option<&SkipPredicate>, request: Request<B>) -> (bool, Request<B>) {
     let Some(predicate) = predicate else {
         return (false, request);
     };
 
-    // This is a hack to get the request head. maybe there's a better way to do this.
     let (parts, body) = request.into_parts();
     let request_head = Request::from_parts(parts, ());
     let should_skip = predicate(&request_head);
@@ -36,13 +31,12 @@ pub(crate) fn check_skip_predicate<B>(predicate: Option<&SkipPredicate>, request
     (should_skip, Request::from_parts(parts, body))
 }
 
-/// Builder for a rate-limit layer with compile-time store/resolver/factory types.
+/// Builder for a rate-limit Layer with compile-time Policy and response-factory types.
 #[derive(Debug)]
 #[must_use]
-pub struct RateLimitBuilder<K, S = (), P = u64, F = DefaultResponseFactory> {
+pub struct RateLimitBuilder<K, P = (), F = DefaultResponseFactory> {
     key_extractor: K,
-    store: S,
-    limit_provider: P,
+    policy: P,
     response_factory: F,
     config: RateLimitConfig,
 }
@@ -51,114 +45,61 @@ impl<K> RateLimitBuilder<K> {
     pub(crate) fn new(key_extractor: K) -> Self {
         Self {
             key_extractor,
-            store: (),
-            limit_provider: 1,
+            policy: (),
             response_factory: DefaultResponseFactory,
             config: RateLimitConfig {
                 policy_name: String::from("default-policy"),
-                window: Duration::from_secs(60),
                 key_encoder: None,
                 skip_predicate: None,
-                store_failure_mode: StoreFailureMode::default(),
+                policy_failure_mode: PolicyFailureMode::default(),
                 #[cfg(feature = "tracing")]
-                store_failure_tracing_level: tracing::Level::WARN,
+                policy_failure_tracing_level: tracing::Level::WARN,
                 rate_limit_fields: RateLimitFields::default(),
             },
         }
     }
 }
 
-impl<K, S, P, F> RateLimitBuilder<K, S, P, F> {
-    /// Inject the rate-limit store and update the builder's store type state.
-    pub fn with_store<S2>(self, store: S2) -> RateLimitBuilder<K, S2, P, F> {
+impl<K, P, F> RateLimitBuilder<K, P, F> {
+    /// Select the Policy and update the builder's Policy type state.
+    pub fn with_policy<P2>(self, policy: P2) -> RateLimitBuilder<K, P2, F> {
         let Self {
             key_extractor,
-            limit_provider,
             response_factory,
             config,
             ..
         } = self;
         RateLimitBuilder {
             key_extractor,
-            store,
-            limit_provider,
-            response_factory,
-            config,
-        }
-    }
-
-    /// Set a fixed quota limit and update the provider type state.
-    pub fn limit(self, limit: u64) -> RateLimitBuilder<K, S, u64, F> {
-        let Self {
-            key_extractor,
-            store,
-            response_factory,
-            config,
-            ..
-        } = self;
-        RateLimitBuilder {
-            key_extractor,
-            store,
-            limit_provider: limit,
-            response_factory,
-            config,
-        }
-    }
-
-    /// Replace the fixed provider with a custom asynchronous limit provider.
-    pub fn limit_provider<P2>(self, limit_provider: P2) -> RateLimitBuilder<K, S, P2, F> {
-        let Self {
-            key_extractor,
-            store,
-            response_factory,
-            config,
-            ..
-        } = self;
-        RateLimitBuilder {
-            key_extractor,
-            store,
-            limit_provider,
+            policy,
             response_factory,
             config,
         }
     }
 
     /// Replace the response factory and update its type state.
-    pub fn response_factory<F2>(self, response_factory: F2) -> RateLimitBuilder<K, S, P, F2> {
+    pub fn response_factory<F2>(self, response_factory: F2) -> RateLimitBuilder<K, P, F2> {
         let Self {
             key_extractor,
-            store,
-            limit_provider,
+            policy,
             config,
             ..
         } = self;
         RateLimitBuilder {
             key_extractor,
-            store,
-            limit_provider,
+            policy,
             response_factory,
             config,
         }
     }
 
-    /// Set the fixed-window duration.
-    pub fn window(mut self, window: Duration) -> Self {
-        self.config.window = window;
-        self
-    }
-
-    /// Set the stable policy identifier used in the scoped key and response metadata.
+    /// Set the stable Policy identifier used in the scoped Client Key and response metadata.
     pub fn policy_name(mut self, policy_name: impl Into<String>) -> Self {
         self.config.policy_name = policy_name.into();
         self
     }
 
-    /// Encode the scoped key before passing it to the [`crate::Store`].
-    ///
-    /// The callback runs in the middleware future's polling path. It must be deterministic,
-    /// non-blocking, free of I/O, collision-resistant for the caller's key space, and
-    /// non-panicking. Without this method, the complete scoped key is passed to the Store
-    /// unchanged.
+    /// Encode the scoped Client Key before passing it to the Policy.
     pub fn with_key_encoder<E>(mut self, encoder: E) -> Self
     where
         E: Fn(&str) -> String + Send + Sync + 'static,
@@ -167,12 +108,7 @@ impl<K, S, P, F> RateLimitBuilder<K, S, P, F> {
         self
     }
 
-    /// Bypass rate limiting when `predicate` returns `true` for the request.
-    ///
-    /// The predicate receives the request head and extensions with a unit body. It runs
-    /// synchronously before client-key extraction and must be non-blocking, free of I/O, and
-    /// non-panicking. A bypassed request calls the inner service without resolving a limit,
-    /// charging the Store, or adding rate-limit context or response fields.
+    /// Bypass rate limiting when `predicate` returns true for the request head.
     pub fn skip<Predicate>(mut self, predicate: Predicate) -> Self
     where
         Predicate: Fn(&Request<()>) -> bool + Send + Sync + 'static,
@@ -181,20 +117,16 @@ impl<K, S, P, F> RateLimitBuilder<K, S, P, F> {
         self
     }
 
-    /// Select the mode to use when the Store fails.
-    pub fn store_failure_mode(mut self, mode: StoreFailureMode) -> Self {
-        self.config.store_failure_mode = mode;
+    /// Select the behavior used when the Policy cannot produce a trustworthy Decision.
+    pub fn policy_failure_mode(mut self, mode: PolicyFailureMode) -> Self {
+        self.config.policy_failure_mode = mode;
         self
     }
 
-    /// Select the tracing level used for Store failure events.
-    ///
-    /// This configuration is available with the `tracing` Cargo feature. The default is
-    /// [`tracing::Level::WARN`]. It affects both [`StoreFailureMode::Allow`] and
-    /// [`StoreFailureMode::Reject`] events.
+    /// Select the tracing level used for Policy failure events.
     #[cfg(feature = "tracing")]
-    pub fn store_failure_tracing_level(mut self, level: tracing::Level) -> Self {
-        self.config.store_failure_tracing_level = level;
+    pub fn policy_failure_tracing_level(mut self, level: tracing::Level) -> Self {
+        self.config.policy_failure_tracing_level = level;
         self
     }
 
@@ -205,57 +137,52 @@ impl<K, S, P, F> RateLimitBuilder<K, S, P, F> {
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
-        if self.config.window < MINIMUM_WINDOW {
-            return Err(ConfigError::WindowTooShort(self.config.window, MINIMUM_WINDOW));
-        }
         if self.config.policy_name.is_empty() {
             return Err(ConfigError::EmptyPolicyName);
+        }
+        if !self
+            .config
+            .policy_name
+            .bytes()
+            .all(|byte| (0x20..=0x7e).contains(&byte))
+        {
+            return Err(ConfigError::InvalidPolicyName);
         }
         Ok(())
     }
 }
 
-impl<K> RateLimitLayer<K, (), u64, DefaultResponseFactory> {
-    /// Start a typed rate-limit layer builder.
+impl<K> RateLimitLayer<K, (), DefaultResponseFactory> {
+    /// Start a typed rate-limit Layer builder.
     pub fn builder(key_extractor: K) -> RateLimitBuilder<K> {
         RateLimitBuilder::new(key_extractor)
     }
 }
 
-impl<K, S, P, F> RateLimitBuilder<K, S, P, F>
+impl<K, P, F> RateLimitBuilder<K, P, F>
 where
-    S: Store,
-    P: LimitProvider,
+    P: RateLimitPolicy,
 {
-    /// Validate the builder and produce a configured layer.
-    pub fn build(self) -> Result<RateLimitLayer<K, S, P, F>, ConfigError> {
+    /// Validate the builder and produce a configured Layer.
+    pub fn build(self) -> Result<RateLimitLayer<K, P, F>, ConfigError> {
         self.validate()?;
         Ok(RateLimitLayer {
             key_extractor: self.key_extractor,
-            store: self.store,
-            limit_provider: self.limit_provider,
+            policy: self.policy,
             response_factory: self.response_factory,
             config: Arc::new(self.config),
         })
     }
 }
 
-/// Immutable configuration shared by every service produced from a layer.
+/// Immutable configuration shared by every Service produced from a Layer.
 pub(crate) struct RateLimitConfig {
-    /// The stable policy identifier used in the scoped key and response metadata.
     pub(crate) policy_name: String,
-    /// The fixed-window duration.
-    pub(crate) window: Duration,
-    /// Encode the scoped key before passing it to the [`crate::Store`].
     pub(crate) key_encoder: Option<KeyEncoder>,
-    /// Decide whether a request bypasses rate limiting.
     pub(crate) skip_predicate: Option<SkipPredicate>,
-    /// Select the mode to use when the Store fails.
-    pub(crate) store_failure_mode: StoreFailureMode,
-    /// Select the tracing level used when the Store fails.
+    pub(crate) policy_failure_mode: PolicyFailureMode,
     #[cfg(feature = "tracing")]
-    pub(crate) store_failure_tracing_level: tracing::Level,
-    /// Select the [`RateLimitFields`] revision emitted in responses.
+    pub(crate) policy_failure_tracing_level: tracing::Level,
     pub(crate) rate_limit_fields: RateLimitFields,
 }
 
@@ -264,12 +191,11 @@ impl fmt::Debug for RateLimitConfig {
         let mut debug = f.debug_struct("RateLimitConfig");
         debug
             .field("policy_name", &self.policy_name)
-            .field("window", &self.window)
             .field("has_key_encoder", &self.key_encoder.is_some())
             .field("has_skip_predicate", &self.skip_predicate.is_some())
-            .field("store_failure_mode", &self.store_failure_mode);
+            .field("policy_failure_mode", &self.policy_failure_mode);
         #[cfg(feature = "tracing")]
-        debug.field("store_failure_tracing_level", &self.store_failure_tracing_level);
+        debug.field("policy_failure_tracing_level", &self.policy_failure_tracing_level);
         debug.field("rate_limit_fields", &self.rate_limit_fields).finish()
     }
 }
