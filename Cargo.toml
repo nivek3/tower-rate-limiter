@@ -1,6 +1,6 @@
 [package]
 name = "tower-rate-limiter"
-version = "0.2.0"
+version = "0.2.0-alpha.0"
 edition = "2024"
 rust-version = "1.96.0"
 description = "Keyed Fixed Window and multi-backend GCRA rate limiting middleware for Tower"

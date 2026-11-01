@@ -3,6 +3,9 @@
 # https://release-plz.dev/docs/config#the-release_always-field
 release_always = false
 
+# Mark SemVer prereleases as GitHub prereleases.
+git_release_type = "auto"
+
 # Don't increment the minor version for every feature commit
 features_always_increment_minor = false
 
