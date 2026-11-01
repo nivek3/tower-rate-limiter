@@ -1,0 +1,13 @@
+pgbench (17.10 (Debian 17.10-1.pgdg13+1))
+transaction type: /work/workloads/fill80-keys10000.sql
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 2
+maximum number of tries: 1
+number of transactions per client: 6250
+number of transactions actually processed: 100000/100000
+number of failed transactions: 0 (0.000%)
+latency average = 1.775 ms
+initial connection time = 7.425 ms
+tps = 9015.823672 (without initial connection time)

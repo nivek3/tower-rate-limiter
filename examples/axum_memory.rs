@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::{error::Error, net::SocketAddr, time::Duration};
-use tower_rate_limiter::{IpKeyExtractor, MemoryStore, RateLimitLayer};
+use tower_rate_limiter::{FixedWindow, IpKeyExtractor, MemoryStore, RateLimitLayer};
 
 // check if the request is from an allowlisted IP address
 fn is_allowlisted(request: &Request<()>, allowlist: &HashSet<IpAddr>) -> bool {
@@ -22,18 +22,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let key_extractor = IpKeyExtractor::new();
     let global_limiter = RateLimitLayer::builder(key_extractor)
         .policy_name("global-limit")
-        .limit(10)
-        .window(Duration::from_secs(60))
-        .with_store(MemoryStore::new())
+        .with_policy(FixedWindow::new(MemoryStore::new(), 10, Duration::from_secs(60))?)
         .build()?;
 
     let auth_allowlist = Arc::clone(&allowlist);
     let auth_limiter = RateLimitLayer::builder(key_extractor)
         .policy_name("auth-limit")
         .skip(move |request| is_allowlisted(request, &auth_allowlist))
-        .limit(3)
-        .window(Duration::from_secs(60))
-        .with_store(MemoryStore::new())
+        .with_policy(FixedWindow::new(MemoryStore::new(), 3, Duration::from_secs(60))?)
         .build()?;
 
     let auth_routes = Router::new()

@@ -1,0 +1,14 @@
+{
+  "postgres_gcra": {
+    "passed": 5,
+    "failed": 0
+  },
+  "postgres_gcra_interfaces": {
+    "passed": 3,
+    "failed": 0
+  },
+  "command": "cargo test --locked --no-default-features --features postgres-gcra --test postgres_gcra_interfaces --test postgres_gcra",
+  "database": "Isolated benchmark container, local loopback, no existing database used",
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "formatting": "not run"
+}

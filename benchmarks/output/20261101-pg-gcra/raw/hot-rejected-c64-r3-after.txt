@@ -1,0 +1,13 @@
+pgbench (17.10 (Debian 17.10-1.pgdg13+1))
+transaction type: /work/workloads/after-hot-rejected.sql
+scaling factor: 1
+query mode: prepared
+number of clients: 64
+number of threads: 2
+maximum number of tries: 1
+duration: 5 s
+number of transactions actually processed: 6614
+number of failed transactions: 0 (0.000%)
+latency average = 48.723 ms
+initial connection time = 28.195 ms
+tps = 1313.561199 (without initial connection time)

@@ -1,0 +1,13 @@
+pgbench (17.10 (Debian 17.10-1.pgdg13+1))
+transaction type: /work/workloads/before-hot-allowed.sql
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 2
+maximum number of tries: 1
+duration: 5 s
+number of transactions actually processed: 4928
+number of failed transactions: 0 (0.000%)
+latency average = 16.240 ms
+initial connection time = 9.258 ms
+tps = 985.194888 (without initial connection time)

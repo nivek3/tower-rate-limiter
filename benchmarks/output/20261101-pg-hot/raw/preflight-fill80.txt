@@ -1,0 +1,13 @@
+pgbench (17.10 (Debian 17.10-1.pgdg13+1))
+transaction type: /work/workloads/fill80-concurrent.sql
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 2
+maximum number of tries: 1
+number of transactions per client: 4
+number of transactions actually processed: 64/64
+number of failed transactions: 0 (0.000%)
+latency average = 28.865 ms
+initial connection time = 9.160 ms
+tps = 554.304521 (without initial connection time)
