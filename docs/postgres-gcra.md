@@ -45,9 +45,10 @@ See [GCRA backends](gcra.md) for the shared quota, Decision, and rollout contrac
 
 ## Atomicity and time source
 
-The migration installs `tower_rate_limiter_gcra_v1.charge(...)`. It creates the key row if needed,
-locks the row, then captures `clock_timestamp()` **after** that lock. It performs the GCRA decision
-and accepted-state update in the same database function. A rejected charge intentionally does not
+The migration installs `tower_rate_limiter_gcra_v1.charge(...)`. It locks an existing key row
+directly or creates a missing row, retrying the lookup on a concurrent creation or deletion.
+It then captures `clock_timestamp()` **after** that lock and performs the GCRA decision and
+accepted-state update in the same database function. A rejected charge intentionally does not
 advance state.
 
 Using database time avoids application-host clock skew for a decision. Requests for the same key
@@ -78,10 +79,16 @@ review.
 
 ## Expired-state cleanup
 
-The state table records `expires_at` and indexes it. Expired rows no longer affect a fresh GCRA
-decision, but PostgreSQL does not remove them automatically. Schedule a bounded cleanup job under
-your operational ownership, for example repeatedly deleting expired rows in small batches during
-off-peak periods. Grant that job `DELETE` separately when the runtime principal does not have it.
+The state table records `expires_at` and indexes it. This cleanup timestamp is rounded **up** to
+whole seconds, reducing index changes and permitting HOT updates when page space is available.
+It never precedes the precise TAT and can retain an inactive row for less than one additional
+second. Admission, remaining capacity, retry, and reset calculations still use microsecond TAT.
+The migration leaves `fillfactor` and autovacuum at PostgreSQL defaults.
+
+Expired rows no longer affect a fresh GCRA decision, but PostgreSQL does not remove them
+automatically. Schedule a bounded cleanup job under your operational ownership, for example
+repeatedly deleting expired rows in small batches during off-peak periods. Grant that job `DELETE`
+separately when the runtime principal does not have it.
 
 One concurrency-safe batch shape is:
 
@@ -89,7 +96,7 @@ One concurrency-safe batch shape is:
 WITH expired AS (
     SELECT namespace, client_key
     FROM tower_rate_limiter_gcra_v1.state
-    WHERE expires_at <= clock_timestamp()
+    WHERE expires_at <= statement_timestamp()
     ORDER BY expires_at
     LIMIT 1000
     FOR UPDATE SKIP LOCKED
@@ -99,6 +106,9 @@ USING expired
 WHERE state.namespace = expired.namespace
   AND state.client_key = expired.client_key;
 ```
+
+`statement_timestamp()` fixes the cutoff for each batch so the expiry condition can use an index
+range scan. The charge function still uses `clock_timestamp()` after acquiring the row lock.
 
 Choose the interval, batch size, vacuum/monitoring policy, and retention budget for your workload;
 the library does not run a cleanup worker. Monitor table growth, index size, lock waits, database

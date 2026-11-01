@@ -57,20 +57,22 @@ BEGIN
     END IF;
     v_burst_window_us := p_burst * p_emission_interval_us;
 
-    -- A cleanup transaction can delete an expired row between insertion and row locking. Retry
-    -- that narrow race; a new placeholder uses infinity so cleanup cannot remove it before this
-    -- transaction replaces expiry with the accepted TAT.
+    -- Read existing state first; retry creation if another charge or cleanup wins the race.
     LOOP
-        INSERT INTO tower_rate_limiter_gcra_v1.state (namespace, client_key, tat_us, expires_at)
-        VALUES (p_namespace, p_client_key, 0, TIMESTAMPTZ 'infinity')
-        ON CONFLICT (namespace, client_key) DO NOTHING;
-
         SELECT tat_us
           INTO v_tat_us
           FROM tower_rate_limiter_gcra_v1.state
          WHERE namespace = p_namespace
            AND client_key = p_client_key
          FOR UPDATE;
+
+        EXIT WHEN FOUND;
+
+        -- Infinity keeps cleanup from removing a placeholder before its first accepted charge.
+        INSERT INTO tower_rate_limiter_gcra_v1.state (namespace, client_key, tat_us, expires_at)
+        VALUES (p_namespace, p_client_key, 0, TIMESTAMPTZ 'infinity')
+        ON CONFLICT (namespace, client_key) DO NOTHING
+        RETURNING tat_us INTO v_tat_us;
 
         EXIT WHEN FOUND;
     END LOOP;
@@ -104,9 +106,13 @@ BEGIN
                 USING ERRCODE = '22000';
         END IF;
 
+        -- Round only cleanup expiry up to reduce index churn; admission keeps the precise TAT.
         UPDATE tower_rate_limiter_gcra_v1.state
            SET tat_us = v_candidate_tat_us,
-               expires_at = TIMESTAMPTZ 'epoch' + (v_candidate_tat_us * INTERVAL '1 microsecond')
+               expires_at = TIMESTAMPTZ 'epoch' + (
+                   (v_candidate_tat_us / 1000000
+                    + CASE WHEN v_candidate_tat_us % 1000000 = 0 THEN 0 ELSE 1 END)
+                   * INTERVAL '1 second')
          WHERE namespace = p_namespace
            AND client_key = p_client_key;
 
