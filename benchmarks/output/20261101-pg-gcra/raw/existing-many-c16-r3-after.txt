@@ -1,0 +1,13 @@
+pgbench (17.10 (Debian 17.10-1.pgdg13+1))
+transaction type: /work/workloads/after-existing-many.sql
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 2
+maximum number of tries: 1
+duration: 5 s
+number of transactions actually processed: 34921
+number of failed transactions: 0 (0.000%)
+latency average = 2.285 ms
+initial connection time = 19.652 ms
+tps = 7000.995388 (without initial connection time)

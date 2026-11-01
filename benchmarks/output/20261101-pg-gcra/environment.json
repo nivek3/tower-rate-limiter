@@ -1,0 +1,55 @@
+{
+  "started_utc": "2026-11-01T03:33:06.041507+00:00",
+  "source_commit": "0ef5acf721c96f43b39d06326c429a4daa4436b3",
+  "source_dirty": true,
+  "before_source_sha256": "1a769d7578bacb584939be2657df9d0bea5228ce5d7d09a9bf14be11dc44afc4",
+  "after_source_sha256": "dd893529812e77bcb7a080ffe60a5fef36d09bab736c13efbc760cfcbc6a9fea",
+  "postgres_version": "PostgreSQL 17.10 (Debian 17.10-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "fsync": "on",
+  "synchronous_commit": "on",
+  "host": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "docker_vm": "8 CPUs; 8392990720 bytes; OrbStack",
+  "server_limits": "1 CPU / 512 MiB / 128 PIDs",
+  "client_limits": "1 CPU / 256 MiB / 128 PIDs; 2 pgbench threads",
+  "image_id": "sha256:b51aeb2517df75e92137460fbd98f61c84617650df0f9f1fff98c666e82aff68",
+  "topology": "Separate local Docker containers; client shares server network namespace, TCP loopback",
+  "measurement": "Database function calls, not Rust/Tower/HTTP throughput; prepared protocol",
+  "duration_seconds": 5,
+  "warmup_seconds": 1,
+  "fresh_key_warmup": "none, every request creates state",
+  "concurrencies": [
+    16,
+    64
+  ],
+  "repeats": 3,
+  "key_space": 10000,
+  "seed": 1337,
+  "latency_logging": "Every successful transaction, no sampling",
+  "raw_latency_directory": "/private/tmp/tower-pg35-bench/logs",
+  "quotas": {
+    "allowed": "1 us interval, burst 10000000",
+    "rejected": "60 s interval, burst 1"
+  },
+  "ordering": "Before/after pair order reversed on alternating repetitions; table reset before each case",
+  "finished_utc": "2026-11-01T03:43:12.767941+00:00",
+  "confirmation": {
+    "duration_seconds": 15,
+    "warmup_seconds": 1,
+    "repeats": 3,
+    "cases": [
+      {
+        "workload": "existing-many",
+        "concurrency": 64
+      },
+      {
+        "workload": "hot-allowed",
+        "concurrency": 16
+      }
+    ],
+    "measured_runs": 12
+  },
+  "measured_runs": 60,
+  "successful_calls": 1642763,
+  "failed_transactions": 0,
+  "temporary_database_cleaned_up": true
+}
