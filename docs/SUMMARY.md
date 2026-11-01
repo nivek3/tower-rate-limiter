@@ -8,6 +8,8 @@
   - [Axum with nested policies](examples/axum-memory.md)
   - [Trusted proxy client IP](examples/trusted-proxy-client-ip.md)
   - [Axum with Redis](examples/axum-redis.md)
+  - [Axum with Memory GCRA](examples/axum-memory-gcra.md)
+  - [Axum with Redis GCRA](examples/axum-redis-gcra.md)
 - [Configuration](configuration.md)
 - [How it works](concepts.md)
 - [Rate limit fields](rate-limit-fields.md)

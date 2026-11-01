@@ -23,6 +23,12 @@ type KeyedLimiter = DefaultKeyedRateLimiter<String, StateInformationMiddleware>;
 /// Each constructor creates an independent limiter. Cloning a value shares its keyed state, so
 /// cloned Policies enforce the same per-key quota within one process. Every check charges exactly
 /// one request.
+///
+/// # Memory growth
+///
+/// **Warning:** Client Keys are not automatically evicted. Without periodic calls to
+/// [`Self::prune_inactive_keys`], an unbounded stream of new keys causes unbounded memory growth.
+/// Pruning removes only inactive keys; it does not impose a hard limit on active keys or memory.
 #[derive(Clone)]
 pub struct MemoryGcra {
     limiter: Arc<KeyedLimiter>,
@@ -50,8 +56,8 @@ impl MemoryGcra {
 
     /// Remove Client Keys whose rate-limit state is indistinguishable from a fresh key.
     ///
-    /// Applications accepting an unbounded key space should call this periodically to keep the
-    /// process-local state map bounded.
+    /// Applications accepting an unbounded key space should call this periodically to reclaim
+    /// inactive state. This does not impose a hard limit on active keys or memory.
     pub fn prune_inactive_keys(&self) {
         self.limiter.retain_recent();
     }

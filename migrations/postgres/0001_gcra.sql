@@ -34,6 +34,7 @@ RETURNS TABLE (
     reset_after_us BIGINT
 )
 LANGUAGE plpgsql
+VOLATILE
 SET search_path = pg_catalog, tower_rate_limiter_gcra_v1
 AS $$
 DECLARE

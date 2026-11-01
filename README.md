@@ -83,6 +83,10 @@ let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+For a runnable server with application-owned periodic cleanup, see
+[`axum_memory_gcra.rs`](examples/axum_memory_gcra.rs). An unbounded stream of new keys requires
+an explicit cleanup and memory-budget strategy; `MemoryGcra` does not automatically evict keys.
+
 ### Redis
 
 Use `RedisGcra` when replicas need one shared rate. It runs against ordinary Redis with scripting
@@ -115,6 +119,7 @@ let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
 Use `runtime-smol` instead of `runtime-tokio` for Smol. The
 [Redis GCRA guide](https://nivek-ph.github.io/tower-rate-limiter/redis-gcra.html) documents Redis
 permissions, failure behavior, and operational limits.
+See [`axum_redis_gcra.rs`](examples/axum_redis_gcra.rs) for a complete runnable Axum server.
 
 ### PostgreSQL
 

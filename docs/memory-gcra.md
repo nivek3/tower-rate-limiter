@@ -36,6 +36,10 @@ GCRA is not a replacement for a shared quota store.
 
 ## Key cardinality
 
+> **Warning:** `MemoryGcra` does not automatically evict keys. With an unbounded stream of new
+> client keys, memory grows without bound unless the application prunes inactive state.
+> Pruning does not impose a hard limit on active keys or total memory.
+
 The limiter holds keyed state in memory. Choose a bounded, application-controlled client-key space
 where possible, and treat unbounded attacker-controlled identities as a capacity risk. Set an
 application memory budget and lifecycle strategy before exposing a high-cardinality limiter.

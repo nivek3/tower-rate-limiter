@@ -76,12 +76,20 @@ name = "axum_memory"
 required-features = ["axum", "memory"]
 
 [[example]]
+name = "axum_memory_gcra"
+required-features = ["axum", "memory-gcra"]
+
+[[example]]
 name = "trusted_proxy_client_ip"
 required-features = ["axum", "memory"]
 
 [[example]]
 name = "axum_redis"
 required-features = ["axum", "redis", "runtime-tokio"]
+
+[[example]]
+name = "axum_redis_gcra"
+required-features = ["axum", "redis-gcra", "runtime-tokio"]
 
 [[example]]
 name = "benchmark_server"
