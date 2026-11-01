@@ -1,14 +1,13 @@
 //! The request-aware rate-limiting seam.
 //!
 //! Public interfaces are re-exported here; private files group builder configuration, the Tower
-//! lifecycle, Store ownership, policy state, errors, and response finalization.
+//! lifecycle, Policy ownership, Decision state, errors, and response finalization.
 
 mod builder;
 mod error;
 mod future;
 mod key_extractor;
 mod layer;
-mod limit;
 mod policy;
 mod response;
 mod service;
@@ -20,8 +19,7 @@ pub use error::{ConfigError, RateLimitError};
 pub use future::ResponseFuture;
 pub use key_extractor::{ClientIpKeyExtractor, IpKeyExtractor, KeyExtractor, TrustedProxyClientIpKeyExtractor};
 pub use layer::RateLimitLayer;
-pub use limit::LimitProvider;
-pub use policy::{Policy, RateLimitContext};
+pub use policy::{Decision, DecisionOutcome, PolicyDecision, RateLimitContext, RateLimitPolicy};
 pub use response::{DefaultResponseFactory, RateLimitFields, ResponseFactory, ResponseReason};
 pub use service::RateLimit;
-pub use store::{Store, StoreFailureMode, Usage};
+pub use store::{FixedWindow, FixedWindowFuture, FixedWindowStore, FixedWindowUsage, PolicyFailureMode};

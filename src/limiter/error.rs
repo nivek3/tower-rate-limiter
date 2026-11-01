@@ -8,19 +8,16 @@ pub enum RateLimitError {
     /// The client key could not be resolved.
     #[error("client key unavailable ({0}): {1}")]
     Key(String, String),
-    /// The request's quota limit could not be resolved.
-    #[error("rate-limit quota unavailable ({0}): {1}")]
-    Quota(String, String),
-    /// The rate-limit store could not charge the request reliably.
-    #[error("rate-limit store unavailable ({0}): {1}")]
-    Store(String, String),
+    /// The selected policy could not charge the request reliably.
+    #[error("rate-limit policy unavailable ({0}): {1}")]
+    Policy(String, String),
 }
 
 impl RateLimitError {
     /// Return the stable machine-readable error code.
     pub fn code(&self) -> &str {
         match self {
-            Self::Key(code, _) | Self::Quota(code, _) | Self::Store(code, _) => code,
+            Self::Key(code, _) | Self::Policy(code, _) => code,
         }
     }
 }
@@ -34,4 +31,8 @@ pub enum ConfigError {
     /// The policy identifier is invalid.
     #[error("empty policy name")]
     EmptyPolicyName,
+    /// The policy identifier contains bytes that cannot be represented as an HTTP Structured
+    /// Fields string.
+    #[error("policy name must contain only visible ASCII characters")]
+    InvalidPolicyName,
 }

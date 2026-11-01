@@ -1,0 +1,36 @@
+{
+  "verified_at": "2026-11-01T20:08:24.377120+08:00",
+  "code_commit": "d2006836c86c31b62698275548c4113a874bd2b8",
+  "migration_sha256": "00d639c826c37d06fd6471f0f80a868e347c4d4fd73453c9919bff1ffb3b64fe",
+  "postgres": "postgres (PostgreSQL) 17.10 (Debian 17.10-1.pgdg13+1)",
+  "redis": "Redis server v=7.4.11 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=c8d8130a4710f7c0",
+  "environment": "Separate temporary PostgreSQL and Redis containers bound only to local loopback; existing services were not used",
+  "checks": [
+    {
+      "command": "cargo fmt -- --check",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --locked --all-targets --all-features",
+      "exit_code": 0,
+      "passed": 130,
+      "failed": 0,
+      "ignored": 0,
+      "postgres_behavior_tests": 6
+    },
+    {
+      "command": "cargo clippy --offline --locked --all-targets --all-features -- -D warnings",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --offline --locked --doc --all-features",
+      "exit_code": 0,
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "command": "git diff --cached --check (implementation commit)",
+      "exit_code": 0
+    }
+  ]
+}

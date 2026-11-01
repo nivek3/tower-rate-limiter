@@ -1,0 +1,46 @@
+{
+  "rounding_vectors": [
+    {
+      "tat_us": 0,
+      "seconds": 0
+    },
+    {
+      "tat_us": 1,
+      "seconds": 1
+    },
+    {
+      "tat_us": 999999,
+      "seconds": 1
+    },
+    {
+      "tat_us": 1000000,
+      "seconds": 1
+    },
+    {
+      "tat_us": 1000001,
+      "seconds": 2
+    },
+    {
+      "tat_us": 1793512345678901,
+      "seconds": 1793512346
+    },
+    {
+      "tat_us": 9223372036854775807,
+      "seconds": 9223372036855
+    }
+  ],
+  "variants_passed": [
+    "baseline",
+    "rounded",
+    "fill80",
+    "rounded_fill80"
+  ],
+  "checks": [
+    "rounding boundaries and BIGINT-safe quotient",
+    "exact burst / positive retry",
+    "rejected charge preserves precise TAT and expiry",
+    "key isolation",
+    "64 concurrent requests admit exactly 8",
+    "expiry is at or above TAT with less than 1 second slack"
+  ]
+}

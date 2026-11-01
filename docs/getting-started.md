@@ -5,11 +5,11 @@ the first working layer; the same layer can later be applied to an Axum router.
 
 ## 1. Add the dependency
 
-The default feature enables the in-memory Store:
+The default feature enables the in-memory `FixedWindowStore`:
 
 ```toml
 [dependencies]
-tower-rate-limiter = "0.1"
+tower-rate-limiter = "0.2"
 ```
 
 The crate requires Rust 1.96 or newer.
@@ -38,45 +38,42 @@ The minimal production-shaped builder is:
 
 ```rust,ignore
 use std::time::Duration;
-use tower_rate_limiter::{IpKeyExtractor, MemoryStore, RateLimitLayer};
+use tower_rate_limiter::{FixedWindow, IpKeyExtractor, MemoryStore, RateLimitLayer};
 
 let layer = RateLimitLayer::builder(IpKeyExtractor::new())
     .policy_name("public-api")
-    .limit(100)
-    .window(Duration::from_secs(60))
-    .with_store(MemoryStore::new())
+    .with_policy(FixedWindow::new(MemoryStore::new(), 100, Duration::from_secs(60))?)
     .build()?;
 # Ok::<(), tower_rate_limiter::ConfigError>(())
 ```
 
-`build()` validates configuration. A policy name cannot be empty and a window must be at least one
-millisecond. The typed builder also prevents `build()` until a Store has been supplied.
+`build()` validates layer configuration, including a non-empty policy name. `FixedWindow::new(...)`
+validates its window, which must be at least one millisecond. The typed builder also prevents
+`build()` until a policy has been supplied.
 
 ## Builder defaults
 
 | Setting | Default |
 | --- | --- |
-| Limit | `1` request |
-| Window | 60 seconds |
 | Policy name | `default-policy` |
-| Store errors | Reject with `503 Service Unavailable` |
+| Policy errors | Reject with `503 Service Unavailable` |
 | Response fields | IETF draft 11 |
 
-A real application should set a stable policy name, a quota, and a window deliberately. Layers that
-share a Store, policy name, and extracted key intentionally share usage.
+A real application should set a stable policy name and select its policy deliberately. Layers that
+share a policy instance or backend state, policy name, and extracted key intentionally share usage.
 
 ## What happens on each request
 
-The middleware first extracts a key and resolves the quota. Only after both steps succeed does it
-increment the Store. A provider failure therefore consumes no quota, while a charged request is not
-refunded based on the downstream response.
+The middleware first extracts a key, scopes it with the policy name, then asks the selected policy
+to charge it. A policy failure consumes no quota metadata, while a charged request is not refunded
+based on the downstream response.
 
 The first `limit` requests are allowed. Request `limit + 1` is rate limited, and rejected requests
 continue to increment usage without extending the active fixed window.
 
 For a limit of `2`, the sequence is:
 
-| Request | `Usage::used` | Remaining | Result |
+| Request | `FixedWindowUsage::used` | Remaining | Result |
 | --- | ---: | ---: | --- |
 | 1 | 1 | 1 | inner service called |
 | 2 | 2 | 0 | inner service called |
@@ -88,8 +85,8 @@ enforced only when `used > limit`.
 ## Next steps
 
 - Read [How it works](concepts.md) for the public extension points.
-- Browse the [complete examples](examples.md) for Tower, Axum, dynamic quotas, proxy handling, and Redis.
+- Browse the [complete examples](examples.md) for Tower, Axum, proxy handling, and Redis.
 - Review every builder option in [Configuration](configuration.md).
 - Use [Axum and Redis](adapters.md) when the service needs framework or shared-store integration.
 - Browse the repository's [`examples/`](https://github.com/nivek-ph/tower-rate-limiter/tree/main/examples)
-  for dynamic quotas, nested policies, proxy handling, and custom error responses.
+  for nested policies, proxy handling, and custom error responses.

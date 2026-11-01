@@ -3,7 +3,8 @@ use std::{env, error::Error, net::SocketAddr, time::Duration};
 use axum::{Router, routing::get};
 use http::{Request, Response, StatusCode};
 use tower_rate_limiter::{
-    IpKeyExtractor, KeyExtractor, RateLimitError, RateLimitLayer, RedisStore, ResponseFactory, ResponseReason,
+    FixedWindow, IpKeyExtractor, KeyExtractor, RateLimitError, RateLimitLayer, RedisStore, ResponseFactory,
+    ResponseReason,
 };
 
 /// Demo extractor: read a client key from `X-User-Id`.
@@ -77,19 +78,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let global_limiter = RateLimitLayer::builder(IpKeyExtractor::new())
         .policy_name("global-limit")
-        .limit(10)
-        .window(Duration::from_secs(60))
         .with_key_encoder(|k| k.to_string())
-        .with_store(store.clone())
+        .with_policy(FixedWindow::new(store.clone(), 10, Duration::from_secs(60))?)
         .build()?;
 
     let user_limiter = RateLimitLayer::builder(UserIdKeyExtractor)
         .policy_name("user-limit")
-        .limit(3)
-        .window(Duration::from_secs(60))
         .with_key_encoder(|k| k.to_string())
         .response_factory(AuthResponseFactory)
-        .with_store(store)
+        .with_policy(FixedWindow::new(store, 3, Duration::from_secs(60))?)
         .build()?;
 
     let auth_routes = Router::new()

@@ -5,7 +5,7 @@ use std::{
 };
 
 use axum::{Router, routing::get};
-use tower_rate_limiter::{MemoryStore, RateLimitLayer, TrustedProxyClientIpKeyExtractor};
+use tower_rate_limiter::{FixedWindow, MemoryStore, RateLimitLayer, TrustedProxyClientIpKeyExtractor};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -16,9 +16,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let key_extractor = TrustedProxyClientIpKeyExtractor::new(move |peer| peer == trusted_proxy);
     let limiter = RateLimitLayer::builder(key_extractor)
         .policy_name("client-ip-limit")
-        .limit(100)
-        .window(Duration::from_secs(60))
-        .with_store(MemoryStore::new())
+        .with_policy(FixedWindow::new(MemoryStore::new(), 100, Duration::from_secs(60))?)
         .build()?;
     let app = Router::new().route("/health", get(|| async { "ok" })).layer(limiter);
 

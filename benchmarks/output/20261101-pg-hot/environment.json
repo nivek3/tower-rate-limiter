@@ -1,0 +1,67 @@
+{
+  "started_utc": "2026-11-01T11:11:00.309981+00:00",
+  "source_commit": "0ef5acf721c96f43b39d06326c429a4daa4436b3",
+  "source_dirty": true,
+  "baseline": "Current working migration, including previous lookup/RETURNING optimization",
+  "baseline_sha256": "dd893529812e77bcb7a080ffe60a5fef36d09bab736c13efbc760cfcbc6a9fea",
+  "postgres": "PostgreSQL 17.10 (Debian 17.10-1.pgdg13+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "pgstattuple": "1.5",
+  "fsync": "on",
+  "synchronous_commit": "on",
+  "host": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "image_id": "sha256:b51aeb2517df75e92137460fbd98f61c84617650df0f9f1fff98c666e82aff68",
+  "server_limits": "1 CPU / 512 MiB / 128 PIDs",
+  "client_limits": "1 CPU / 256 MiB / 128 PIDs / 2 threads",
+  "protocol": "prepared; TCP loopback between separate containers sharing a network namespace",
+  "clients": 16,
+  "repeats": 3,
+  "warmup_calls": 1024,
+  "cases": [
+    {
+      "case": "keys1000",
+      "keys": 1000,
+      "measured_calls": 100000
+    },
+    {
+      "case": "keys10000",
+      "keys": 10000,
+      "measured_calls": 100000
+    },
+    {
+      "case": "hot1",
+      "keys": 1,
+      "measured_calls": 4096
+    }
+  ],
+  "quota": "emission interval 1 us / burst 10000000; all requests should be admitted",
+  "autovacuum": "Disabled equally on the four experimental tables only, to compare pre-vacuum growth at equal work; manual VACUUM afterwards",
+  "variants": {
+    "baseline": {
+      "round_expiry_up_to_seconds": false,
+      "fillfactor": 100
+    },
+    "rounded": {
+      "round_expiry_up_to_seconds": true,
+      "fillfactor": 100
+    },
+    "fill80": {
+      "round_expiry_up_to_seconds": false,
+      "fillfactor": 80
+    },
+    "rounded_fill80": {
+      "round_expiry_up_to_seconds": true,
+      "fillfactor": 80
+    }
+  },
+  "rounding": "Integer quotient and remainder; tat_us, admission and retry/reset calculations remain precise",
+  "ordering": "Variant order rotates and alternates across repeated runs",
+  "raw_latency_logs": "/private/tmp/tower-pg35-hot/logs",
+  "growth_metrics": "Measured after identical warmup and call counts; pgstattuple dead/free fractions and pgstatindex density are indicators, not an exact bloat estimate",
+  "finished_utc": "2026-11-01T11:18:46.103456+00:00",
+  "measured_runs": 36,
+  "successful_calls": 2449152,
+  "failed_transactions": 0,
+  "formal_migration_modified": false,
+  "harness_sha256": "8b34185a74b02404ee67e39d444efc88fec27a3e322ef544aace84ef839e3831",
+  "temporary_database_cleaned_up": true
+}

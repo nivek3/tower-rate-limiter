@@ -4,17 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.1.7](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.6...v0.1.7) - 2026-08-20
+## [0.2.0-alpha.0](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.6...v0.2.0-alpha.0) - 2026-11-01
 
 ### Added
 
-- add Redis path HTTP benchmark harness ([#30](https://github.com/nivek-ph/tower-rate-limiter/pull/30))
+- Add the Redis path HTTP benchmark harness ([#30](https://github.com/nivek3/tower-rate-limiter/pull/30)).
+
+- Add `MemoryGcra`, `RedisGcra`, and `PostgresGcra` policies behind a common `GcraQuota` and
+  `Decision` contract. Memory delegates to governor; Redis uses an attributed upstream Lua
+  artifact on ordinary Redis; PostgreSQL uses an application-applied, versioned SQL migration.
+- Add explicit Memory GCRA key pruning and an approximate tracked-key count for application-owned
+  high-cardinality housekeeping.
+- Add the PostgreSQL GCRA migration at `migrations/postgres/0001_gcra.sql`; applications retain
+  ownership of schema installation, database permissions, pool lifecycle, and cleanup scheduling.
+- Add algorithm-neutral `RateLimitPolicy` and `Decision` interfaces for custom policies.
+
+### Changed
+
+- Move fixed-window limiting behind `FixedWindow<S: FixedWindowStore>` and configure layers with
+  `RateLimitBuilder::with_policy`.
+- Source response metadata, retry timing, failure handling, and request context from policy
+  decisions.
 
 ### Other
 
-- *(deps)* bump redis in the cargo-dependencies group ([#32](https://github.com/nivek-ph/tower-rate-limiter/pull/32))
-- *(deps)* bump the cargo-dependencies group across 1 directory with 2 updates ([#28](https://github.com/nivek-ph/tower-rate-limiter/pull/28))
-- update README for improved navigation
+- Update dependencies and README navigation since 0.1.6.
+
+### Removed
+
+- Remove the request-level `LimitProvider` and the old Store-driven outer limiter interface.
+
+### Migration
+
+- This is the first alpha of the breaking 0.2 release; APIs may change before 0.2.0. Existing Store-based builders must wrap fixed-window stores in
+  `FixedWindow` and pass the resulting policy to `with_policy`.
 
 ## [0.1.6](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.5...v0.1.6) - 2026-08-13
 
