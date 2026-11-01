@@ -7,6 +7,8 @@ use std::{
 use sqlx::{PgPool, Row};
 use tower_rate_limiter::{GcraQuota, PostgresGcra, RateLimitError, RateLimitPolicy};
 
+mod gcra_contract;
+
 static MIGRATION: &str = include_str!("../migrations/postgres/0001_gcra.sql");
 static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static POSTGRES_URL: OnceLock<Option<String>> = OnceLock::new();
@@ -38,6 +40,18 @@ fn namespace(test_name: &str) -> String {
 
 fn quota(rate: u32, burst: u32) -> GcraQuota {
     GcraQuota::new(rate, Duration::from_secs(1), burst).expect("valid GCRA quota")
+}
+
+#[tokio::test]
+async fn common_gcra_contract() {
+    let _guard = TEST_LOCK.lock().await;
+    let Some(pool) = pool().await else {
+        return;
+    };
+    for quota in gcra_contract::quotas() {
+        let policy = PostgresGcra::new(pool.clone(), quota).with_namespace(namespace("common-contract"));
+        gcra_contract::assert_contract(policy, quota, tokio::time::sleep).await;
+    }
 }
 
 async fn expires_at_us(pool: &PgPool, namespace: &str, key: &str) -> i64 {

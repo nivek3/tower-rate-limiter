@@ -13,6 +13,15 @@ use tower_rate_limiter::{
     Decision, GcraQuota, KeyExtractor, MemoryGcra, RateLimitError, RateLimitLayer, RateLimitPolicy,
 };
 
+mod gcra_contract;
+
+#[tokio::test]
+async fn common_gcra_contract() {
+    for quota in gcra_contract::quotas() {
+        gcra_contract::assert_contract(MemoryGcra::new(quota), quota, tokio::time::sleep).await;
+    }
+}
+
 fn quota(rate: u32, burst: u32) -> GcraQuota {
     GcraQuota::new(rate, Duration::from_secs(1), burst).expect("valid GCRA quota")
 }

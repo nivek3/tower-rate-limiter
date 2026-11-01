@@ -29,6 +29,8 @@ pub enum GcraQuotaError {
 ///
 /// `rate` requests are replenished over `period`. `burst` is the total number of requests that a
 /// fresh Client Key may consume immediately, not an amount added on top of `rate`.
+/// Backend arithmetic can affect admission at precision boundaries; Redis retains the upstream
+/// Lua artifact's floating-point behavior rather than promising exact microsecond enforcement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GcraQuota {
     rate: u32,
@@ -52,8 +54,7 @@ impl GcraQuota {
         }
 
         let period_nanos = period.as_nanos();
-        // All built-in remote adapters exchange whole microseconds. Round the common emission
-        // interval up so no adapter admits faster than the configured long-term rate.
+        // Round up so quota quantization itself cannot increase the configured rate.
         let rate_u128 = u128::from(rate);
         let emission_micros = period_nanos
             .checked_add(rate_u128 * 1_000 - 1)

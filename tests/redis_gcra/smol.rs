@@ -2,6 +2,9 @@
 
 mod redis_gcra;
 
+#[path = "../gcra_contract/mod.rs"]
+mod gcra_contract;
+
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use tower_rate_limiter::RateLimitPolicy;
@@ -12,6 +15,26 @@ fn serial_guard() -> MutexGuard<'static, ()> {
     TEST_SERIALIZATION
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[test]
+fn upstream_microsecond_recovery_boundaries() {
+    let _serial = serial_guard();
+    smol::block_on(redis_gcra::upstream_microsecond_recovery_boundaries("smol"));
+}
+
+#[test]
+fn upstream_floating_point_burst_characterization() {
+    let _serial = serial_guard();
+    smol::block_on(redis_gcra::upstream_floating_point_burst_characterization("smol"));
+}
+
+#[test]
+fn common_gcra_contract() {
+    let _serial = serial_guard();
+    smol::block_on(redis_gcra::common_gcra_contract("smol", |duration| async move {
+        smol::Timer::after(duration).await;
+    }));
 }
 
 #[test]

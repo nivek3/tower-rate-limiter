@@ -54,11 +54,12 @@ by the included adapters: `rate` requests replenish over `period`, and `burst` i
 immediate capacity of a fresh client key (not extra capacity added to `rate`). Every built-in GCRA
 adapter charges exactly one request per check.
 
-`GcraQuota` rounds its emission interval **up** to whole microseconds. That prevents the
-microsecond-backed adapters from admitting faster than the configured long-term rate. The adapters
-return the same `Decision` meanings—limit, window, remaining capacity, reset, and, after rejection,
-the earliest retry—but do not promise byte-for-byte identical timing fields because they use
-different clocks and state engines. See the [GCRA overview](https://nivek-ph.github.io/tower-rate-limiter/gcra.html).
+`GcraQuota` rounds its emission interval **up** to whole microseconds so quota rounding itself
+does not increase the configured rate. Redis retains upstream floating-point arithmetic and can
+admit fewer or more requests at precision boundaries; it does not promise strict microsecond
+enforcement. The adapters return the same `Decision` meanings—limit, window, remaining capacity,
+reset, and, after rejection, the earliest retry—but do not promise identical timing fields or
+identical admission at every boundary. See the [GCRA overview](https://nivek-ph.github.io/tower-rate-limiter/gcra.html).
 
 ### Memory
 

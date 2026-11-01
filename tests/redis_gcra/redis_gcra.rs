@@ -9,6 +9,36 @@ use tower_rate_limiter::{
 
 const CLIENT_KEY: &str = "client";
 
+type ScriptReply = (i64, i64, String, String);
+
+// Freeze only TIME; execute the pinned artifact and real Redis state changes in one atomic batch.
+const FROZEN_TIME_SCRIPT: &str = concat!(
+    r#"
+local actual_redis = redis
+local elapsed_us = 0
+local redis = {
+    replicate_commands = actual_redis.replicate_commands,
+    call = function(command, ...)
+        if command == "TIME" then
+            return {tonumber(ARGV[5]) + math.floor(elapsed_us / 1000000), elapsed_us % 1000000}
+        end
+        return actual_redis.call(command, ...)
+    end
+}
+local function charge()
+"#,
+    include_str!("../../src/store/redis_gcra_allow_n.lua"),
+    r#"
+end
+local replies = {}
+for i = 6, #ARGV do
+    elapsed_us = tonumber(ARGV[i])
+    replies[#replies + 1] = charge()
+end
+return replies
+"#,
+);
+
 #[derive(Clone, Copy)]
 struct StaticKey;
 
@@ -55,6 +85,77 @@ async fn flush_script_cache() {
 
 fn quota(rate: u32, burst: u32) -> GcraQuota {
     GcraQuota::new(rate, Duration::from_secs(1), burst).expect("valid GCRA quota")
+}
+
+async fn frozen_replies(runtime: &str, quota: GcraQuota, epoch: u64, offsets_us: &[u64]) -> Vec<ScriptReply> {
+    let script = redis::Script::new(FROZEN_TIME_SCRIPT);
+    let mut invocation = script.key(namespace(runtime, "frozen-time"));
+    invocation
+        .arg(quota.burst())
+        .arg(1_u32)
+        .arg(quota.emission_interval().as_secs_f64())
+        .arg(1_u32)
+        .arg(epoch)
+        .arg(offsets_us);
+    invocation
+        .invoke_async(&mut connection().await)
+        .await
+        .expect("execute pinned script with controlled Redis time")
+}
+
+pub(crate) async fn upstream_microsecond_recovery_boundaries(runtime: &str) {
+    for epoch in [1_800_000_000, 2_200_000_000, 2_483_228_799] {
+        for interval_us in [1, 10, 100] {
+            let quota = GcraQuota::new(1, Duration::from_micros(interval_us), 1).expect("microsecond quota");
+            for offset in [interval_us - 1, interval_us, interval_us + 1] {
+                let replies = frozen_replies(runtime, quota, epoch, &[0, offset]).await;
+                assert_eq!(replies.len(), 2);
+                assert_eq!(replies[0].0, 1);
+                assert_eq!(
+                    replies[1].0,
+                    i64::from(offset >= interval_us),
+                    "{epoch}, {interval_us}, {offset}"
+                );
+                for (allowed, remaining, retry, reset) in replies {
+                    assert_eq!(remaining, 0);
+                    let retry: f64 = retry.parse().expect("numeric retry");
+                    let reset: f64 = reset.parse().expect("numeric reset");
+                    assert!(reset > 0.0 && reset <= quota.window().as_secs_f64() + 0.000_001);
+                    if allowed == 1 {
+                        assert_eq!(retry, -1.0);
+                    } else {
+                        assert!(retry > 0.0 && retry <= reset);
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub(crate) async fn upstream_floating_point_burst_characterization(runtime: &str) {
+    // These are upstream numerical behavior, not a strict burst-capacity guarantee.
+    for (epoch, interval_us, expected_allowed) in [(1_800_000_000, 3, 1006), (2_200_000_000, 1, 1048)] {
+        let quota = GcraQuota::new(1, Duration::from_micros(interval_us), 1000).expect("microsecond quota");
+        let replies = frozen_replies(runtime, quota, epoch, &[0; 1100]).await;
+        let allowed: i64 = replies.iter().map(|reply| reply.0).sum();
+        assert_eq!(
+            allowed, expected_allowed,
+            "pinned upstream behavior at {epoch}, {interval_us}us"
+        );
+        assert!(allowed > i64::from(quota.burst()));
+        assert_eq!(replies.last().expect("last charge").0, 0);
+    }
+}
+
+pub(crate) async fn common_gcra_contract<S, Sleep>(runtime: &str, sleep: S)
+where
+    S: Fn(Duration) -> Sleep,
+    Sleep: Future<Output = ()>,
+{
+    for quota in crate::gcra_contract::quotas() {
+        let policy = policy(runtime, "common-contract", quota).await;
+        crate::gcra_contract::assert_contract(policy, quota, &sleep).await;
+    }
 }
 
 pub(crate) async fn burst_rejection_does_not_add_penalty_and_recovers<S, Sleep>(runtime: &str, sleep: S)

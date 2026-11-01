@@ -2,9 +2,30 @@
 
 mod redis_gcra;
 
+#[path = "../gcra_contract/mod.rs"]
+mod gcra_contract;
+
 use tower_rate_limiter::RateLimitPolicy;
 
 static TEST_SERIALIZATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[tokio::test]
+async fn upstream_microsecond_recovery_boundaries() {
+    let _serial = TEST_SERIALIZATION.lock().await;
+    redis_gcra::upstream_microsecond_recovery_boundaries("tokio").await;
+}
+
+#[tokio::test]
+async fn upstream_floating_point_burst_characterization() {
+    let _serial = TEST_SERIALIZATION.lock().await;
+    redis_gcra::upstream_floating_point_burst_characterization("tokio").await;
+}
+
+#[tokio::test]
+async fn common_gcra_contract() {
+    let _serial = TEST_SERIALIZATION.lock().await;
+    redis_gcra::common_gcra_contract("tokio", tokio::time::sleep).await;
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn burst_rejection_does_not_add_penalty_and_recovers() {

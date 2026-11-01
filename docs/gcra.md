@@ -34,9 +34,9 @@ let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
   `rate`.
 - Each included adapter charges exactly one request. Weighted charges and refunds are not part of
   this API.
-- The configured emission interval is rounded **up** to whole microseconds. This is the common
-  precision of the remotely stored adapters and ensures no included adapter admits faster than the
-  configured long-term rate.
+- The configured emission interval is rounded **up** to whole microseconds so quota quantization
+  itself does not increase the configured rate. This does not remove backend arithmetic error:
+  Redis retains the upstream Lua artifact's floating-point behavior.
 - A complete burst must replenish within one year. The constructor rejects longer windows.
 
 All adapters produce `RateLimitPolicy` `Decision` values with the same meanings: an allowed result
@@ -44,11 +44,20 @@ contains the configured limit, advertised window, remaining capacity, and reset 
 rejection has zero remaining capacity plus an earliest `retry_after`. These values drive the
 middleware's `RateLimit` and `Retry-After` fields.
 
-The contract is semantic, not a promise of identical duration values at every instant. Memory uses
-its process clock, Redis uses `TIME`, and PostgreSQL captures `clock_timestamp()` after acquiring a
-row lock. Network latency, elapsed time while producing a response, and backend-specific rounding
+The contract describes quota and decision meanings, not identical admission or duration values at
+every precision boundary. Memory uses its process clock, Redis uses `TIME`, and PostgreSQL captures
+`clock_timestamp()` after acquiring a row lock. Network latency, elapsed time while producing a
+response, and backend-specific rounding
 can make individual `reset_after` or `retry_after` values differ slightly. Treat fields as pacing
-guidance, not a distributed-clock comparison API.
+guidance, not a distributed-clock comparison API. Redis can admit fewer or more requests than exact
+GCRA arithmetic at very small intervals, including exceeding the configured burst. See the
+[Redis precision limits](redis-gcra.md#precision) before choosing microsecond-scale quotas.
+
+The shared backend tests cover `burst = 1`, a non-divisible rate/period, key isolation, clone-shared
+state, rejection without extending the penalty, recovery after retry, and a full burst after an idle
+window. They compare those behaviors and metadata bounds rather than exact duration equality
+between independently clocked backends. Separate Redis tests characterize the pinned artifact at
+1µs, 10µs, and 100µs recovery boundaries and record known floating-point burst deviations.
 
 ## Identity, namespace, and versioning
 

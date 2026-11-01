@@ -41,6 +41,11 @@ impl From<RedisGcraError> for RateLimitError {
 /// The caller owns connection lifecycle and supplies an established redis-rs multiplexed
 /// connection. Each charge uses Redis server time and one atomic invocation of the attributed
 /// upstream Lua artifact. The minimal Policy always charges exactly one request.
+///
+/// The unmodified upstream artifact uses floating-point timestamps. At very small intervals it
+/// can admit fewer or more requests than exact GCRA arithmetic, including exceeding `burst` at
+/// a frozen timestamp. Whole-microsecond quota rounding and reply validation do not eliminate
+/// this limitation; this Policy does not promise strict microsecond admission precision.
 #[derive(Clone)]
 pub struct RedisGcra {
     connection: MultiplexedConnection,
