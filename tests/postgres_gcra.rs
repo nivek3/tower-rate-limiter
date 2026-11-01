@@ -182,7 +182,8 @@ async fn independent_pools_share_and_keys_are_isolated() {
         return;
     };
     let second_pool = pool().await.expect("POSTGRES_URL was established");
-    let quota = quota(20, 2);
+    // Keep refill slower than CI round trips so this checks shared state rather than timing.
+    let quota = GcraQuota::new(1, Duration::from_secs(60), 2).expect("valid GCRA quota");
     let namespace = namespace("shared-pools");
     let first = PostgresGcra::new(first_pool, quota).with_namespace(namespace.clone());
     let second = PostgresGcra::new(second_pool, quota).with_namespace(namespace);
