@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1](https://github.com/nivek3/tower-rate-limiter/compare/v0.2.0-alpha.0...v0.2.0-alpha.1) - 2026-11-03
+
+### Added
+
+- update configuration functions for GCRA policies
+
 ## [0.2.0-alpha.0](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.6...v0.2.0-alpha.0) - 2026-11-01
 
 ### Added
