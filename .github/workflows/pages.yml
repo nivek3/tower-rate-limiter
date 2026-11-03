@@ -32,7 +32,10 @@ jobs:
           mdbook-version: ${{ env.MDBOOK_VERSION }}
 
       - name: Install mdBook Mermaid
-        run: cargo install mdbook-mermaid --version "${MDBOOK_MERMAID_VERSION}" --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook-mermaid@${{ env.MDBOOK_MERMAID_VERSION }}
+          fallback: none
 
       - name: Configure mdBook Mermaid
         run: mdbook-mermaid install .
