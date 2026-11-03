@@ -14,11 +14,13 @@ tower-rate-limiter = { version = "0.2", default-features = false, features = ["m
 
 ```rust
 use std::time::Duration;
-use tower_rate_limiter::{GcraQuota, MemoryGcra};
+use tower_rate_limiter::{GcraQuota, GcraQuotaError, MemoryGcra};
 
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-let policy = MemoryGcra::new(quota);
-# Ok::<(), tower_rate_limiter::GcraQuotaError>(())
+fn configure() -> Result<MemoryGcra, GcraQuotaError> {
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+    let policy = MemoryGcra::new(quota);
+    Ok(policy)
+}
 ```
 
 See [GCRA backends](gcra.md) for burst, microsecond rounding, response-field, and rollout
@@ -48,14 +50,12 @@ Call `prune_inactive_keys()` periodically to discard keys whose state is already
 fresh key. `tracked_key_count()` exposes an approximate count for capacity monitoring:
 
 ```rust
-# use std::time::Duration;
-# use tower_rate_limiter::{GcraQuota, MemoryGcra};
-# let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-# let policy = MemoryGcra::new(quota);
-policy.prune_inactive_keys();
-let tracked = policy.tracked_key_count();
-# let _ = tracked;
-# Ok::<(), tower_rate_limiter::GcraQuotaError>(())
+use tower_rate_limiter::MemoryGcra;
+
+fn prune(policy: &MemoryGcra) -> usize {
+    policy.prune_inactive_keys();
+    policy.tracked_key_count()
+}
 ```
 
 The crate does not start a background cleanup task; the application controls scheduling and can

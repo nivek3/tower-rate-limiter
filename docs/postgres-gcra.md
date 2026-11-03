@@ -29,16 +29,15 @@ own migration directory so their normal checksum and ordering rules apply.
 The crate deliberately never applies DDL or creates schema objects at runtime. Treat the migration
 as part of service provisioning and roll it out before deploying code that enables `PostgresGcra`.
 
-```rust,no_run
+```rust
 use std::time::Duration;
-use tower_rate_limiter::{GcraQuota, PostgresGcra};
+use tower_rate_limiter::{GcraQuota, GcraQuotaError, PostgresGcra};
 
-# async fn configure(pool: sqlx::PgPool) -> Result<(), Box<dyn std::error::Error>> {
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-let policy = PostgresGcra::new(pool, quota).with_namespace("my-service-v1");
-# let _ = policy;
-# Ok(())
-# }
+fn configure(pool: sqlx::PgPool) -> Result<PostgresGcra, GcraQuotaError> {
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+    let policy = PostgresGcra::new(pool, quota).with_namespace("my-service-v1");
+    Ok(policy)
+}
 ```
 
 See [GCRA backends](gcra.md) for the shared quota, Decision, and rollout contract.

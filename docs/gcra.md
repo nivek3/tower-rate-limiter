@@ -23,10 +23,11 @@ Construct each policy from a `GcraQuota`:
 
 ```rust
 use std::time::Duration;
-use tower_rate_limiter::GcraQuota;
+use tower_rate_limiter::{GcraQuota, GcraQuotaError};
 
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-# Ok::<(), tower_rate_limiter::GcraQuotaError>(())
+fn configure_quota() -> Result<GcraQuota, GcraQuotaError> {
+    GcraQuota::new(100, Duration::from_secs(60), 20)
+}
 ```
 
 - `rate` requests replenish over `period`.

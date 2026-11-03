@@ -2,7 +2,7 @@
 
 [Crates.io](https://crates.io/crates/tower-rate-limiter) ·
 [API docs](https://docs.rs/tower-rate-limiter) ·
-[Book](https://nivek-ph.github.io/tower-rate-limiter/) ·
+[Book](https://nivek3.github.io/tower-rate-limiter/) ·
 [Examples](https://github.com/nivek-ph/tower-rate-limiter/tree/main/examples)
 
 Keyed HTTP rate limiting middleware for [Tower](https://github.com/tower-rs/tower).
@@ -40,7 +40,7 @@ let service = limiter.layer(inner_service);
 
 This policy allows 100 requests per peer IP in each 60-second fixed window. The next request
 receives `429 Too Many Requests` with `Retry-After`. See the
-[quick-start guide](https://nivek-ph.github.io/tower-rate-limiter/getting-started.html) for a
+[quick-start guide](https://nivek3.github.io/tower-rate-limiter/getting-started.html) for a
 complete runnable example.
 
 > `MemoryStore` keeps fixed-window counters in one process. Use `RedisStore` with
@@ -59,7 +59,7 @@ does not increase the configured rate. Redis retains upstream floating-point ari
 admit fewer or more requests at precision boundaries; it does not promise strict microsecond
 enforcement. The adapters return the same `Decision` meanings—limit, window, remaining capacity,
 reset, and, after rejection, the earliest retry—but do not promise identical timing fields or
-identical admission at every boundary. See the [GCRA overview](https://nivek-ph.github.io/tower-rate-limiter/gcra.html).
+identical admission at every boundary. See the [GCRA overview](https://nivek3.github.io/tower-rate-limiter/gcra.html).
 
 ### Memory
 
@@ -73,15 +73,17 @@ tower-rate-limiter = { version = "0.2", default-features = false, features = ["m
 ```
 
 ```rust
-use std::time::Duration;
+use std::{error::Error, time::Duration};
 use tower_rate_limiter::{GcraQuota, IpKeyExtractor, MemoryGcra, RateLimitLayer};
 
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
-    .policy_name("public-api")
-    .with_policy(MemoryGcra::new(quota))
-    .build()?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+fn configure() -> Result<RateLimitLayer<IpKeyExtractor, MemoryGcra>, Box<dyn Error>> {
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+    let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
+        .policy_name("public-api")
+        .with_policy(MemoryGcra::new(quota))
+        .build()?;
+    Ok(limiter)
+}
 ```
 
 For a runnable server with application-owned periodic cleanup, see
@@ -100,25 +102,25 @@ redis = "1"
 tower-rate-limiter = { version = "0.2", default-features = false, features = ["redis-gcra", "runtime-tokio"] }
 ```
 
-```rust,no_run
-use std::time::Duration;
+```rust
+use std::{error::Error, time::Duration};
 use tower_rate_limiter::{GcraQuota, IpKeyExtractor, RateLimitLayer, RedisGcra};
 
-# async fn configure() -> Result<(), Box<dyn std::error::Error>> {
-let client = redis::Client::open("redis://127.0.0.1/")?;
-let connection = client.get_multiplexed_async_connection().await?;
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+async fn configure() -> Result<RateLimitLayer<IpKeyExtractor, RedisGcra>, Box<dyn Error>> {
+    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let connection = client.get_multiplexed_async_connection().await?;
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
 
-let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
-    .policy_name("public-api")
-    .with_policy(RedisGcra::new(connection, quota).with_namespace("my-service"))
-    .build()?;
-# Ok(())
-# }
+    let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
+        .policy_name("public-api")
+        .with_policy(RedisGcra::new(connection, quota).with_namespace("my-service"))
+        .build()?;
+    Ok(limiter)
+}
 ```
 
 Use `runtime-smol` instead of `runtime-tokio` for Smol. The
-[Redis GCRA guide](https://nivek-ph.github.io/tower-rate-limiter/redis-gcra.html) documents Redis
+[Redis GCRA guide](https://nivek3.github.io/tower-rate-limiter/redis-gcra.html) documents Redis
 permissions, failure behavior, and operational limits.
 See [`axum_redis_gcra.rs`](examples/axum_redis_gcra.rs) for a complete runnable Axum server.
 
@@ -136,38 +138,37 @@ sqlx = { version = "0.9", default-features = false, features = ["postgres", "run
 tower-rate-limiter = { version = "0.2", default-features = false, features = ["postgres-gcra"] }
 ```
 
-```rust,no_run
-use std::time::Duration;
+```rust
+use std::{error::Error, time::Duration};
 use tower_rate_limiter::{GcraQuota, IpKeyExtractor, PostgresGcra, RateLimitLayer};
 
-# async fn configure(pool: sqlx::PgPool) -> Result<(), Box<dyn std::error::Error>> {
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
-    .policy_name("public-api-v2")
-    .with_policy(PostgresGcra::new(pool, quota).with_namespace("my-service"))
-    .build()?;
-# let _ = limiter;
-# Ok(())
-# }
+fn configure(pool: sqlx::PgPool) -> Result<RateLimitLayer<IpKeyExtractor, PostgresGcra>, Box<dyn Error>> {
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+    let limiter = RateLimitLayer::builder(IpKeyExtractor::new())
+        .policy_name("public-api-v2")
+        .with_policy(PostgresGcra::new(pool, quota).with_namespace("my-service"))
+        .build()?;
+    Ok(limiter)
+}
 ```
 
-The [Memory GCRA](https://nivek-ph.github.io/tower-rate-limiter/memory-gcra.html),
-[Redis GCRA](https://nivek-ph.github.io/tower-rate-limiter/redis-gcra.html), and
-[PostgreSQL GCRA](https://nivek-ph.github.io/tower-rate-limiter/postgres-gcra.html) guides cover
+The [Memory GCRA](https://nivek3.github.io/tower-rate-limiter/memory-gcra.html),
+[Redis GCRA](https://nivek3.github.io/tower-rate-limiter/redis-gcra.html), and
+[PostgreSQL GCRA](https://nivek3.github.io/tower-rate-limiter/postgres-gcra.html) guides cover
 their state, namespace, migration, permission, and cleanup contracts.
 
 `IpKeyExtractor` reads the peer socket address from request extensions. When using forwarded
 client-IP headers, define and enforce the trusted-proxy boundary first. See
-[Axum and Redis](https://nivek-ph.github.io/tower-rate-limiter/adapters.html) and the
-[production guide](https://nivek-ph.github.io/tower-rate-limiter/production.html).
+[Axum and Redis](https://nivek3.github.io/tower-rate-limiter/adapters.html) and the
+[production guide](https://nivek3.github.io/tower-rate-limiter/production.html).
 
 ## Documentation
 
-- [Quick start](https://nivek-ph.github.io/tower-rate-limiter/getting-started.html)
-- [Configuration](https://nivek-ph.github.io/tower-rate-limiter/configuration.html)
-- [How it works](https://nivek-ph.github.io/tower-rate-limiter/concepts.html)
-- [GCRA backends](https://nivek-ph.github.io/tower-rate-limiter/gcra.html)
-- [Examples](https://nivek-ph.github.io/tower-rate-limiter/examples.html)
+- [Quick start](https://nivek3.github.io/tower-rate-limiter/getting-started.html)
+- [Configuration](https://nivek3.github.io/tower-rate-limiter/configuration.html)
+- [How it works](https://nivek3.github.io/tower-rate-limiter/concepts.html)
+- [GCRA backends](https://nivek3.github.io/tower-rate-limiter/gcra.html)
+- [Examples](https://nivek3.github.io/tower-rate-limiter/examples.html)
 - [API documentation](https://docs.rs/tower-rate-limiter)
 
 ## Benchmarks

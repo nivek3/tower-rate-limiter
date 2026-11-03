@@ -36,15 +36,17 @@ must produce different keys; repeated requests from one caller must produce the 
 
 The minimal production-shaped builder is:
 
-```rust,ignore
+```rust
 use std::time::Duration;
-use tower_rate_limiter::{FixedWindow, IpKeyExtractor, MemoryStore, RateLimitLayer};
+use tower_rate_limiter::{ConfigError, FixedWindow, IpKeyExtractor, MemoryStore, RateLimitLayer};
 
-let layer = RateLimitLayer::builder(IpKeyExtractor::new())
-    .policy_name("public-api")
-    .with_policy(FixedWindow::new(MemoryStore::new(), 100, Duration::from_secs(60))?)
-    .build()?;
-# Ok::<(), tower_rate_limiter::ConfigError>(())
+fn configure() -> Result<RateLimitLayer<IpKeyExtractor, FixedWindow<MemoryStore>>, ConfigError> {
+    let layer = RateLimitLayer::builder(IpKeyExtractor::new())
+        .policy_name("public-api")
+        .with_policy(FixedWindow::new(MemoryStore::new(), 100, Duration::from_secs(60))?)
+        .build()?;
+    Ok(layer)
+}
 ```
 
 `build()` validates layer configuration, including a non-empty policy name. `FixedWindow::new(...)`

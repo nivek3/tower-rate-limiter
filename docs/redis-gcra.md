@@ -24,22 +24,21 @@ For Smol, replace `runtime-tokio` with `runtime-smol`. The application owns Redi
 connection creation, reconnect strategy, and shutdown; the policy accepts an established
 `redis::aio::MultiplexedConnection`.
 
-```rust,no_run
-use std::time::Duration;
+```rust
+use std::{error::Error, time::Duration};
 use tower_rate_limiter::{GcraQuota, IpKeyExtractor, RateLimitLayer, RedisGcra};
 
-# async fn configure() -> Result<(), Box<dyn std::error::Error>> {
-let client = redis::Client::open("redis://127.0.0.1/")?;
-let connection = client.get_multiplexed_async_connection().await?;
+async fn configure() -> Result<RateLimitLayer<IpKeyExtractor, RedisGcra>, Box<dyn Error>> {
+    let client = redis::Client::open("redis://127.0.0.1/")?;
+    let connection = client.get_multiplexed_async_connection().await?;
 
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-let layer = RateLimitLayer::builder(IpKeyExtractor::new())
-    .policy_name("public-api")
-    .with_policy(RedisGcra::new(connection, quota).with_namespace("my-service"))
-    .build()?;
-# let _ = layer;
-# Ok(())
-# }
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+    let layer = RateLimitLayer::builder(IpKeyExtractor::new())
+        .policy_name("public-api")
+        .with_policy(RedisGcra::new(connection, quota).with_namespace("my-service"))
+        .build()?;
+    Ok(layer)
+}
 ```
 
 `rate` requests replenish across `period`. `burst` is the total immediate capacity of a fresh key,

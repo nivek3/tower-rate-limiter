@@ -104,14 +104,15 @@ before choosing a shared state service.
 `redis-gcra` with a runtime feature (`runtime-tokio` or `runtime-smol`), construct it
 from the same established `MultiplexedConnection`, and pass it to `with_policy(...)`:
 
-```rust,no_run
+```rust
 use std::time::Duration;
-use tower_rate_limiter::{GcraQuota, RedisGcra};
+use tower_rate_limiter::{GcraQuota, GcraQuotaError, RedisGcra};
 
-# let connection: redis::aio::MultiplexedConnection = todo!();
-let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
-let policy = RedisGcra::new(connection, quota).with_namespace("my-service");
-# Ok::<(), Box<dyn std::error::Error>>(())
+fn configure(connection: redis::aio::MultiplexedConnection) -> Result<RedisGcra, GcraQuotaError> {
+    let quota = GcraQuota::new(100, Duration::from_secs(60), 20)?;
+    let policy = RedisGcra::new(connection, quota).with_namespace("my-service");
+    Ok(policy)
+}
 ```
 
 `burst` is the total instantaneous capacity; this first version charges a cost of one per request.

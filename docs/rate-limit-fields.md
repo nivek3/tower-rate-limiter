@@ -28,11 +28,13 @@ means the quota unit is requests.
 
 Select the older representation explicitly:
 
-```rust,ignore
-use tower_rate_limiter::RateLimitFields;
+```rust
+use tower_rate_limiter::{IpKeyExtractor, RateLimitBuilder, RateLimitFields, RateLimitLayer};
 
-# let builder = tower_rate_limiter::RateLimitLayer::builder(tower_rate_limiter::IpKeyExtractor::new());
-let builder = builder.rate_limit_fields(RateLimitFields::Draft7);
+fn configure() -> RateLimitBuilder<IpKeyExtractor> {
+    RateLimitLayer::builder(IpKeyExtractor::new())
+        .rate_limit_fields(RateLimitFields::Draft7)
+}
 ```
 
 It produces fields shaped like:
