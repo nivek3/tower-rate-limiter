@@ -45,15 +45,15 @@ All notable changes to this project will be documented in this file.
 - This is the first alpha of the breaking 0.2 release; APIs may change before 0.2.0. Existing Store-based builders must wrap fixed-window stores in
   `FixedWindow` and pass the resulting policy to `with_policy`.
 
-## [0.1.6](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.5...v0.1.6) - 2026-08-13
+## [0.1.6](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.5...v0.1.6) - 2026-08-13
 
 ### Added
 
-- add trusted-proxy client IP extraction and release gates ([#22](https://github.com/nivek-ph/tower-rate-limiter/pull/22))
+- add trusted-proxy client IP extraction and release gates ([#22](https://github.com/nivek3/tower-rate-limiter/pull/22))
 
 ### Other
 
-- align tower-rate-limiter with Tower conventions ([#24](https://github.com/nivek-ph/tower-rate-limiter/pull/24))
+- align tower-rate-limiter with Tower conventions ([#24](https://github.com/nivek3/tower-rate-limiter/pull/24))
 
 ### Added
 
@@ -82,54 +82,54 @@ All notable changes to this project will be documented in this file.
 - On the current 0.x line, automatic release-plz releases remain patch releases. Minor and major
   version changes are prepared manually by the maintainer.
 
-## [0.1.5](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.4...v0.1.5) - 2026-08-11
+## [0.1.5](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.4...v0.1.5) - 2026-08-11
 
 ### Fixed
 
-- *(deps)* require http-extract 0.1.3 ([#20](https://github.com/nivek-ph/tower-rate-limiter/pull/20))
+- *(deps)* require http-extract 0.1.3 ([#20](https://github.com/nivek3/tower-rate-limiter/pull/20))
 
-## [0.1.4](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.3...v0.1.4) - 2026-08-10
+## [0.1.4](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.3...v0.1.4) - 2026-08-10
 
 ### Added
 
-- add trusted-proxy client IP extraction ([#18](https://github.com/nivek-ph/tower-rate-limiter/pull/18))
+- add trusted-proxy client IP extraction ([#18](https://github.com/nivek3/tower-rate-limiter/pull/18))
 
 ### Added
 
 - Add `ClientIpKeyExtractor` for trusted-proxy deployments, using strict client-IP Header parsing
   with socket-address fallback.
 
-## [0.1.3](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.2...v0.1.3) - 2026-08-10
+## [0.1.3](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.2...v0.1.3) - 2026-08-10
 
 ### Added
 
-- *(tracing)* add optional structured tracing for Store failures ([#16](https://github.com/nivek-ph/tower-rate-limiter/pull/16))
+- *(tracing)* add optional structured tracing for Store failures ([#16](https://github.com/nivek3/tower-rate-limiter/pull/16))
 
 ### Other
 
 - update README for clarity and quick start guide
-- *(redis)* share RedisStore contract tests across runtimes ([#15](https://github.com/nivek-ph/tower-rate-limiter/pull/15))
-- *(redis)* verify RedisStore on the Smol runtime ([#12](https://github.com/nivek-ph/tower-rate-limiter/pull/12))
-- *(redis)* add smol support for RedisStore and implement related tests ([#13](https://github.com/nivek-ph/tower-rate-limiter/pull/13))
+- *(redis)* share RedisStore contract tests across runtimes ([#15](https://github.com/nivek3/tower-rate-limiter/pull/15))
+- *(redis)* verify RedisStore on the Smol runtime ([#12](https://github.com/nivek3/tower-rate-limiter/pull/12))
+- *(redis)* add smol support for RedisStore and implement related tests ([#13](https://github.com/nivek3/tower-rate-limiter/pull/13))
 
-## [0.1.2](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.1...v0.1.2) - 2026-08-09
+## [0.1.2](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.1...v0.1.2) - 2026-08-09
 
 ### Added
 
-- *(redis)* update dependencies and enhance Redis integration ([#11](https://github.com/nivek-ph/tower-rate-limiter/pull/11))
-- integrate moka for memory store caching in rate limiter ([#10](https://github.com/nivek-ph/tower-rate-limiter/pull/10))
+- *(redis)* update dependencies and enhance Redis integration ([#11](https://github.com/nivek3/tower-rate-limiter/pull/11))
+- integrate moka for memory store caching in rate limiter ([#10](https://github.com/nivek3/tower-rate-limiter/pull/10))
 
 ### Other
 
-- simplify rate limiter internals and tests ([#9](https://github.com/nivek-ph/tower-rate-limiter/pull/9))
-- expand mdBook guides and examples ([#6](https://github.com/nivek-ph/tower-rate-limiter/pull/6))
-- add mdBook website with GitHub Pages deployment ([#4](https://github.com/nivek-ph/tower-rate-limiter/pull/4))
+- simplify rate limiter internals and tests ([#9](https://github.com/nivek3/tower-rate-limiter/pull/9))
+- expand mdBook guides and examples ([#6](https://github.com/nivek3/tower-rate-limiter/pull/6))
+- add mdBook website with GitHub Pages deployment ([#4](https://github.com/nivek3/tower-rate-limiter/pull/4))
 
-## [0.1.1](https://github.com/nivek-ph/tower-rate-limiter/compare/v0.1.0...v0.1.1) - 2026-08-07
+## [0.1.1](https://github.com/nivek3/tower-rate-limiter/compare/v0.1.0...v0.1.1) - 2026-08-07
 
 ### Added
 
-- unify rate-limit responses and configuration ([#2](https://github.com/nivek-ph/tower-rate-limiter/pull/2))
+- unify rate-limit responses and configuration ([#2](https://github.com/nivek3/tower-rate-limiter/pull/2))
 
 ### Added
 

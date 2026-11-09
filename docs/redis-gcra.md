@@ -63,7 +63,7 @@ stored TAT with different emission intervals.
 The bundled Lua file is a verbatim copy of the `allowN` artifact from
 [`go-redis/redis_rate` v10.0.1](https://github.com/go-redis/redis_rate/tree/v10.0.1). It is based
 on `rwz/redis-gcra`; source revision, checksum, and both license notices are retained in
-[`THIRD_PARTY_NOTICES.md`](https://github.com/nivek-ph/tower-rate-limiter/blob/main/THIRD_PARTY_NOTICES.md).
+[`THIRD_PARTY_NOTICES.md`](https://github.com/nivek3/tower-rate-limiter/blob/main/THIRD_PARTY_NOTICES.md).
 
 ## Failure and deployment limits
 

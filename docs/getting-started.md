@@ -90,5 +90,5 @@ enforced only when `used > limit`.
 - Browse the [complete examples](examples.md) for Tower, Axum, proxy handling, and Redis.
 - Review every builder option in [Configuration](configuration.md).
 - Use [Axum and Redis](adapters.md) when the service needs framework or shared-store integration.
-- Browse the repository's [`examples/`](https://github.com/nivek-ph/tower-rate-limiter/tree/main/examples)
+- Browse the repository's [`examples/`](https://github.com/nivek3/tower-rate-limiter/tree/main/examples)
   for nested policies, proxy handling, and custom error responses.

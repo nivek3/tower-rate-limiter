@@ -7,10 +7,10 @@ description = "Keyed Fixed Window and multi-backend GCRA rate limiting middlewar
 readme = "README.md"
 keywords = ["rate-limit", "tower", "axum", "redis", "gcra"]
 categories = ["web-programming::http-server"]
-homepage = "https://github.com/nivek-ph/tower-rate-limiter"
-repository = "https://github.com/nivek-ph/tower-rate-limiter"
+homepage = "https://github.com/nivek3/tower-rate-limiter"
+repository = "https://github.com/nivek3/tower-rate-limiter"
 license = "MIT OR Apache-2.0"
-authors = ["nivek-ph <h499871809@gmail.com>"]
+authors = ["nivek3 <h499871809@gmail.com>"]
 include = [
 	"/src/**",
 	"/migrations/**",
@@ -58,13 +58,21 @@ governor = { version = "0.10.4", optional = true }
 
 # optional dependencies
 redis = { version = "1", default-features = false, optional = true }
-sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"], optional = true }
+sqlx = { version = "0.9", default-features = false, features = [
+	"postgres",
+	"runtime-tokio",
+], optional = true }
 
 [dev-dependencies]
 axum = "0.8"
 dotenvy = "0.15"
 smol = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = [
+	"macros",
+	"rt-multi-thread",
+	"sync",
+	"time",
+] }
 tower = { version = "0.5", features = ["util"] }
 
 [[example]]

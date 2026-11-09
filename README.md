@@ -3,7 +3,7 @@
 [Crates.io](https://crates.io/crates/tower-rate-limiter) ·
 [API docs](https://docs.rs/tower-rate-limiter) ·
 [Book](https://nivek3.github.io/tower-rate-limiter/) ·
-[Examples](https://github.com/nivek-ph/tower-rate-limiter/tree/main/examples)
+[Examples](https://github.com/nivek3/tower-rate-limiter/tree/main/examples)
 
 Keyed HTTP rate limiting middleware for [Tower](https://github.com/tower-rs/tower).
 
@@ -176,13 +176,13 @@ client-IP headers, define and enforce the trusted-proxy boundary first. See
 The repository includes a Docker Compose benchmark harness with isolated Redis, a benchmark server,
 and an optional in-network `wrk` load generator. Results are written to `benchmarks/output/` with
 raw measurements, `summary.csv`, and `report.txt`. See the
-[benchmark guide](https://github.com/nivek-ph/tower-rate-limiter/blob/main/benchmarks/README.md)
+[benchmark guide](https://github.com/nivek3/tower-rate-limiter/blob/main/benchmarks/README.md)
 for local runs, resource limits, and reproducible settings.
 
 ## Contributing
 
 Bug reports, feature requests, and contributions are welcome through
-[GitHub Issues](https://github.com/nivek-ph/tower-rate-limiter/issues).
+[GitHub Issues](https://github.com/nivek3/tower-rate-limiter/issues).
 
 ## License
 

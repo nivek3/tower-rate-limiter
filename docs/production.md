@@ -77,7 +77,7 @@ The Lua artifact uses Redis Lua numeric precision with a known timestamp precisi
 failover, briefly allowing more requests. The first release does not promise Redis Cluster,
 Sentinel, or managed-proxy compatibility; validate those topologies before relying on the policy.
 The artifact is a verbatim copy from `go-redis/redis_rate` v10.0.1; its provenance and license
-notices are in [`THIRD_PARTY_NOTICES.md`](https://github.com/nivek-ph/tower-rate-limiter/blob/main/THIRD_PARTY_NOTICES.md).
+notices are in [`THIRD_PARTY_NOTICES.md`](https://github.com/nivek3/tower-rate-limiter/blob/main/THIRD_PARTY_NOTICES.md).
 
 ### PostgreSQL
 

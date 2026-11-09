@@ -1,7 +1,7 @@
 [book]
 title = "tower-rate-limiter"
 description = "Keyed HTTP rate limiting middleware for Tower"
-authors = ["nivek-ph"]
+authors = ["nivek3"]
 language = "en"
 src = "docs"
 
@@ -13,9 +13,9 @@ site-url = "/tower-rate-limiter/"
 default-theme = "light"
 preferred-dark-theme = "navy"
 
-git-repository-url = "https://github.com/nivek-ph/tower-rate-limiter"
+git-repository-url = "https://github.com/nivek3/tower-rate-limiter"
 git-repository-icon = "fab-github"
-edit-url-template = "https://github.com/nivek-ph/tower-rate-limiter/edit/main/docs/{path}"
+edit-url-template = "https://github.com/nivek3/tower-rate-limiter/edit/main/docs/{path}"
 no-section-label = true
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 

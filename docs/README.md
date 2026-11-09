@@ -75,4 +75,4 @@ and does not pull in Axum, Redis, or an async runtime.
 6. Check the [Production guide](production.md) before deploying behind a proxy or across replicas.
 
 The [API documentation](https://docs.rs/tower-rate-limiter) is the complete type-level reference.
-The [GitHub repository](https://github.com/nivek-ph/tower-rate-limiter) contains runnable examples.
+The [GitHub repository](https://github.com/nivek3/tower-rate-limiter) contains runnable examples.
