@@ -29,13 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Version Clippy cache for feature checks
-        # rust-cache hashes this file into the primary key and keeps the old restore prefix.
-        run: |
-          mkdir -p .github/clippy-cache/.cargo
-          printf '%s\n' '# Includes isolated feature checks and examples' > .github/clippy-cache/.cargo/config.toml
       - uses: Swatinem/rust-cache@v2
         with:
+          key: feature-checks-v1
           cache-on-failure: true
       - name: Clippy
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
